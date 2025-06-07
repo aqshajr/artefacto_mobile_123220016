@@ -2,12 +2,11 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:email_validator/email_validator.dart';
-import 'package:artefacto/common/page_header.dart';
-import 'package:artefacto/common/page_heading.dart';
-import 'package:artefacto/common/custom_input_field.dart';
-import 'package:artefacto/common/custom_form_button.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:artefacto/model/user_model.dart';
 import 'package:artefacto/service/user_service.dart';
+import 'package:provider/provider.dart';
+import 'package:artefacto/service/user_provider_service.dart';
 
 class EditProfilePage extends StatefulWidget {
   final User user;
@@ -31,6 +30,11 @@ class _EditProfilePageState extends State<EditProfilePage> {
   File? _newProfileImage;
   String? _imageError;
   bool _isUpdating = false;
+  bool _showCurrentPassword = false;
+  bool _showNewPassword = false;
+  bool _showConfirmPassword = false;
+  String? _errorMessage;
+  String? _successMessage;
 
   @override
   void initState() {
@@ -54,17 +58,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
   Future<void> _pickProfileImage() async {
     try {
-      final pickedImage = await _picker.pickImage(
+      final pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
         imageQuality: 85,
       );
 
-      if (pickedImage == null) return;
+      if (pickedFile == null) return;
 
-      final file = File(pickedImage.path);
+      final file = File(pickedFile.path);
       final fileSize = await file.length();
+      final ext = pickedFile.path.split('.').last.toLowerCase();
       final allowedTypes = ['jpg', 'jpeg', 'png', 'gif'];
-      final ext = pickedImage.path.split('.').last.toLowerCase();
 
       if (!allowedTypes.contains(ext)) {
         setState(() {
@@ -86,6 +90,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _newProfileImage = file;
         _imageError = null;
       });
+
+      // Upload image immediately after picking
+      await _uploadProfilePicture();
     } catch (e) {
       setState(() {
         _imageError = 'Gagal memilih gambar: $e';
@@ -93,268 +100,433 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  void _handleUpdateProfile() async {
+  Future<void> _uploadProfilePicture() async {
+    if (_newProfileImage == null) return;
+
+    setState(() {
+      _isUpdating = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
+
+    try {
+      final userService = UserService();
+      final response =
+          await userService.updateProfilePicture(_newProfileImage!);
+
+      if (response['success']) {
+        setState(() {
+          _successMessage = 'Profil berhasil diperbarui!';
+        });
+
+        // Reset image
+        setState(() {
+          _newProfileImage = null;
+        });
+
+        // Refresh user data
+        await Provider.of<UserProviderService>(context, listen: false)
+            .refreshUser();
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        throw Exception(response['message'] ?? 'Gagal memperbarui profil');
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
+    } finally {
+      setState(() => _isUpdating = false);
+    }
+  }
+
+  Future<void> _handleSubmit() async {
     if (!_editFormKey.currentState!.validate()) return;
     if (_imageError != null) return;
 
     // Validate password match if new password is provided
     if (_newPasswordController.text.isNotEmpty &&
         _newPasswordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password baru dan konfirmasi tidak cocok'),
-        ),
-      );
+      setState(() {
+        _errorMessage = 'Password baru dan konfirmasi tidak cocok';
+      });
       return;
     }
 
-    setState(() => _isUpdating = true);
-
-    final updatedUser = User(
-      id: widget.user.id,
-      username: _nameController.text.trim(),
-      email: _emailController.text.trim(),
-      currentPassword: _currentPasswordController.text.isNotEmpty
-          ? _currentPasswordController.text
-          : null,
-      newPassword: _newPasswordController.text.isNotEmpty
-          ? _newPasswordController.text
-          : null,
-      confirmNewPassword: _confirmPasswordController.text.isNotEmpty
-          ? _confirmPasswordController.text
-          : null,
-    );
+    setState(() {
+      _isUpdating = true;
+      _errorMessage = null;
+      _successMessage = null;
+    });
 
     try {
-      final result = await UserApi.updateUserWithImage(
-        updatedUser,
-        _newProfileImage,
+      final userService = UserService();
+      final response = await userService.updateProfile(
+        username: _nameController.text.trim(),
+        email: _emailController.text.trim(),
       );
 
-      if (!mounted) return;
+      if (response['success']) {
+        setState(() {
+          _successMessage = 'Profil berhasil diperbarui!';
+        });
 
-      if (result['success'] == true) {
-        final userData = result['data'];
-        if (userData != null && userData['data'] != null) {
-          final updatedUser = UserModel.fromJson(userData).data?.user;
+        // Reset password fields
+        _currentPasswordController.clear();
+        _newPasswordController.clear();
+        _confirmPasswordController.clear();
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profil berhasil diperbarui!'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+        // Reset image
+        setState(() {
+          _newProfileImage = null;
+        });
 
-          Navigator.pop(context, updatedUser);
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profil berhasil diperbarui tetapi data tidak valid'),
-            ),
-          );
+        // Refresh user data
+        await Provider.of<UserProviderService>(context, listen: false)
+            .refreshUser();
+        if (mounted) {
           Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Profile updated successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(result['message'] ?? 'Gagal memperbarui profil'),
-          ),
-        );
+        throw Exception(response['message'] ?? 'Gagal memperbarui profil');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Terjadi kesalahan: $e'),
-        ),
-      );
+      setState(() {
+        _errorMessage = e.toString().replaceAll('Exception: ', '');
+      });
     } finally {
-      if (mounted) {
-        setState(() => _isUpdating = false);
-      }
+      setState(() => _isUpdating = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Scaffold(
-        backgroundColor: const Color(0xffFFFFFF),
-        body: SingleChildScrollView(
+    return Scaffold(
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        title: Text(
+          'Edit Profile',
+          style: GoogleFonts.playfairDisplay(
+            color: const Color(0xff233743),
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        backgroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xff233743)),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _editFormKey,
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const PageHeader(),
-                Container(
-                  decoration: const BoxDecoration(
-                    color: Color(0xffF5F0DF),
-                    borderRadius: BorderRadius.vertical(
-                      top: Radius.circular(20),
+                if (_errorMessage != null)
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.error_outline,
+                            color: Colors.red.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _errorMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.red.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
+                if (_successMessage != null)
+                  Container(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.green.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.check_circle_outline,
+                            color: Colors.green.shade700, size: 24),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _successMessage!,
+                            style: GoogleFonts.poppins(
+                              color: Colors.green.shade700,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Center(
+                  child: Stack(
                     children: [
-                      const PageHeading(title: 'Edit Profile'),
-                      const SizedBox(height: 16),
-                      Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          Container(
-                            width: 120,
-                            height: 120,
+                      Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: const Color(0xff233743).withOpacity(0.1),
+                            width: 2,
+                          ),
+                        ),
+                        child: ClipOval(
+                          child: _newProfileImage != null
+                              ? Image.file(
+                                  _newProfileImage!,
+                                  fit: BoxFit.cover,
+                                )
+                              : widget.user.profilePicture != null &&
+                                      widget.user.profilePicture!.isNotEmpty
+                                  ? Image.network(
+                                      widget.user.profilePicture!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) => Icon(
+                                        Icons.person,
+                                        size: 60,
+                                        color: Colors.grey[400],
+                                      ),
+                                    )
+                                  : Icon(
+                                      Icons.person,
+                                      size: 60,
+                                      color: Colors.grey[400],
+                                    ),
+                        ),
+                      ),
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: _pickProfileImage,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
+                              color: const Color(0xff233743),
                               shape: BoxShape.circle,
                               border: Border.all(
-                                color: Colors.brown,
+                                color: Colors.white,
                                 width: 2,
                               ),
                             ),
-                            child: ClipOval(
-                              child: _getProfileImageWidget(),
-                            ),
-                          ),
-                          Positioned(
-                            bottom: 0,
-                            right: 0,
-                            child: GestureDetector(
-                              onTap: _pickProfileImage,
-                              child: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.brown,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  color: Colors.white,
-                                  size: 20,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_imageError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 8.0),
-                          child: Text(
-                            _imageError!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 20,
                             ),
                           ),
                         ),
-                      const SizedBox(height: 16),
-                      CustomInputField(
-                        controller: _nameController,
-                        labelText: 'Username',
-                        hintText: 'Username Anda',
-                        isDense: true,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Username wajib diisi';
-                          }
-                          if (value.length < 3) {
-                            return 'Username minimal 3 karakter';
-                          }
-                          return null;
-                        },
                       ),
-                      const SizedBox(height: 16),
-                      CustomInputField(
-                        controller: _emailController,
-                        labelText: 'Email',
-                        hintText: 'Email Anda',
-                        isDense: true,
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return 'Email wajib diisi';
-                          }
-                          if (!EmailValidator.validate(value)) {
-                            return 'Format email tidak valid';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      CustomInputField(
-                        controller: _currentPasswordController,
-                        labelText: 'Password Saat Ini',
-                        hintText: 'Masukkan password saat ini',
-                        isDense: true,
-                        obscureText: true,
-                        validator: (value) {
-                          if (_newPasswordController.text.isNotEmpty &&
-                              (value == null || value.isEmpty)) {
-                            return 'Password saat ini wajib diisi untuk mengubah password';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      CustomInputField(
-                        controller: _newPasswordController,
-                        labelText: 'Password Baru',
-                        hintText: 'Masukkan password baru (opsional)',
-                        isDense: true,
-                        obscureText: true,
-                        validator: (value) {
-                          if (value != null && value.isNotEmpty && value.length < 8) {
-                            return 'Password minimal 8 karakter';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 16),
-                      CustomInputField(
-                        controller: _confirmPasswordController,
-                        labelText: 'Konfirmasi Password Baru',
-                        hintText: 'Masukkan kembali password baru',
-                        isDense: true,
-                        obscureText: true,
-                        validator: (value) {
-                          if (_newPasswordController.text.isNotEmpty &&
-                              (value == null || value.isEmpty)) {
-                            return 'Konfirmasi password wajib diisi';
-                          }
-                          if (value != _newPasswordController.text) {
-                            return 'Password tidak cocok';
-                          }
-                          return null;
-                        },
-                      ),
-                      const SizedBox(height: 8),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                        child: Text(
-                          'Biarkan kosong jika tidak ingin mengubah password',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 22),
-                      _isUpdating
-                          ? const CircularProgressIndicator()
-                          : CustomFormButton(
-                        innerText: 'Perbarui Profil',
-                        onPressed: _handleUpdateProfile,
-                      ),
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text(
-                          'Batal',
-                          style: TextStyle(color: Colors.brown),
-                        ),
-                      ),
-                      const SizedBox(height: 30),
                     ],
+                  ),
+                ),
+                if (_imageError != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8.0),
+                    child: Text(
+                      _imageError!,
+                      style: GoogleFonts.poppins(
+                        color: Colors.red,
+                        fontSize: 12,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                const SizedBox(height: 32),
+                Text(
+                  'Basic Information',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xff233743),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _nameController,
+                  label: 'Username',
+                  icon: Icons.person_outline,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Username wajib diisi';
+                    }
+                    if (value.length < 3) {
+                      return 'Username minimal 3 karakter';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _emailController,
+                  label: 'Email',
+                  icon: Icons.email_outlined,
+                  keyboardType: TextInputType.emailAddress,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Email wajib diisi';
+                    }
+                    if (!EmailValidator.validate(value)) {
+                      return 'Format email tidak valid';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 32),
+                Text(
+                  'Change Password',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xff233743),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _currentPasswordController,
+                  label: 'Password Saat Ini',
+                  icon: Icons.lock_outline,
+                  obscureText: !_showCurrentPassword,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _showCurrentPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showCurrentPassword = !_showCurrentPassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (_newPasswordController.text.isNotEmpty &&
+                        (value == null || value.isEmpty)) {
+                      return 'Password saat ini wajib diisi untuk mengubah password';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _newPasswordController,
+                  label: 'Password Baru',
+                  icon: Icons.lock_outline,
+                  obscureText: !_showNewPassword,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _showNewPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showNewPassword = !_showNewPassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (value != null && value.isNotEmpty && value.length < 6) {
+                      return 'Password minimal 6 karakter';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 16),
+                _buildTextField(
+                  controller: _confirmPasswordController,
+                  label: 'Konfirmasi Password Baru',
+                  icon: Icons.lock_outline,
+                  obscureText: !_showConfirmPassword,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _showConfirmPassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _showConfirmPassword = !_showConfirmPassword;
+                      });
+                    },
+                  ),
+                  validator: (value) {
+                    if (_newPasswordController.text.isNotEmpty &&
+                        value != _newPasswordController.text) {
+                      return 'Password tidak cocok';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 40),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isUpdating ? null : _handleSubmit,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xff233743),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: _isUpdating
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor:
+                                  AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : Text(
+                            'Simpan Perubahan',
+                            style: GoogleFonts.poppins(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -365,31 +537,67 @@ class _EditProfilePageState extends State<EditProfilePage> {
     );
   }
 
-  Widget _getProfileImageWidget() {
-    if (_newProfileImage != null) {
-      return Image.file(
-        _newProfileImage!,
-        fit: BoxFit.cover,
-      );
-    } else if (widget.user.profilePicture != null &&
-        widget.user.profilePicture!.isNotEmpty) {
-      return Image.network(
-        widget.user.profilePicture!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) {
-          return const Icon(
-            Icons.person,
-            size: 60,
-            color: Colors.grey,
-          );
-        },
-      );
-    } else {
-      return const Icon(
-        Icons.person,
-        size: 60,
-        color: Colors.grey,
-      );
-    }
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    Widget? suffixIcon,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      style: GoogleFonts.poppins(
+        fontSize: 14,
+        color: const Color(0xff233743),
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.poppins(
+          fontSize: 14,
+          color: Colors.grey[600],
+        ),
+        prefixIcon: Icon(icon, color: const Color(0xff233743), size: 20),
+        suffixIcon: suffixIcon,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: const Color(0xff233743).withOpacity(0.1),
+          ),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: const Color(0xff233743).withOpacity(0.1),
+          ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: Color(0xff233743),
+          ),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: Colors.red,
+          ),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: Colors.red,
+          ),
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      ),
+      validator: validator,
+    );
   }
 }

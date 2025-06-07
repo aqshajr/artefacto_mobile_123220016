@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
 import '../model/user_model.dart';
+import 'package:artefacto/utils/secure_storage.dart';
+import 'package:artefacto/utils/constants.dart';
 
 class AuthService {
   final String baseUrl =
@@ -29,7 +31,10 @@ class AuthService {
       await prefs.setString('profilePicture', profilePicture);
     }
 
-    await prefs.setInt('lastLoginTime', DateTime.now().millisecondsSinceEpoch);
+    // Set session expiry time (24 hours from now)
+    final expiryTime =
+        DateTime.now().add(const Duration(hours: 24)).millisecondsSinceEpoch;
+    await prefs.setInt('sessionExpiryTime', expiryTime);
   }
 
   Future<void> _clearUserData() async {
@@ -37,26 +42,38 @@ class AuthService {
     await prefs.clear();
   }
 
+  Future<String?> getToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('token');
+  }
+
   Future<bool> checkSession() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final isLoggedIn = prefs.getBool('isLoggedIn') ?? false;
-      final lastLoginTime = prefs.getInt('lastLoginTime') ?? 0;
       final token = prefs.getString('token');
-
-      if (!isLoggedIn || token == null) {
-        return false;
-      }
-
+      final expiryTime = prefs.getInt('sessionExpiryTime') ?? 0;
       final now = DateTime.now().millisecondsSinceEpoch;
-      final sessionAge = now - lastLoginTime;
-      if (sessionAge > const Duration(days: 30).inMilliseconds) {
+
+      if (!isLoggedIn || token == null || now >= expiryTime) {
         await _clearUserData();
         return false;
       }
 
-      final response = await http.get(
-        Uri.parse('$baseUrl/validate-token'),
+      return true;
+    } catch (e) {
+      print('Error checking session: $e');
+      return false;
+    }
+  }
+
+  Future<bool> refreshSession() async {
+    try {
+      final token = await SecureStorage.getToken();
+      if (token == null) return false;
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/refresh-token'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json',
@@ -64,14 +81,27 @@ class AuthService {
       );
 
       if (response.statusCode == 200) {
-        await prefs.setInt('lastLoginTime', now);
-        return true;
-      } else {
-        await _clearUserData();
-        return false;
+        final jsonData = jsonDecode(response.body);
+        if (jsonData['status'] == 'sukses' &&
+            jsonData['data']['token'] != null) {
+          // Save new token
+          await SecureStorage.setToken(jsonData['data']['token']);
+
+          // Update session expiry
+          final prefs = await SharedPreferences.getInstance();
+          final newExpiryTime = DateTime.now()
+              .add(Constants.sessionDuration)
+              .millisecondsSinceEpoch;
+          await prefs.setInt('sessionExpiryTime', newExpiryTime);
+
+          return true;
+        }
       }
+
+      await _clearUserData();
+      return false;
     } catch (e) {
-      print('Error checking session: $e');
+      print('Error refreshing session: $e');
       return false;
     }
   }
@@ -82,26 +112,27 @@ class AuthService {
     required String password,
     required String passwordConfirmation,
   }) async {
-    final url = Uri.parse('$baseUrl/register');
-    final body = jsonEncode({
-      'username': username,
-      'email': email,
-      'password': password,
-      'passwordConfirmation': passwordConfirmation,
-      'role': 0,
-    });
     try {
       final response = await http.post(
-        url,
+        Uri.parse('$baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
-        body: body,
+        body: jsonEncode({
+          'username': username,
+          'email': email,
+          'password': password,
+          'passwordConfirmation': passwordConfirmation,
+          'role': 0,
+        }),
       );
+
       final jsonData = jsonDecode(response.body);
+
       if (response.statusCode == 200 || response.statusCode == 201) {
         final userModel = UserModel.fromJson(jsonData);
         if (userModel.status == 'sukses' && userModel.data?.token != null) {
           final user = userModel.data!.user!;
           final token = userModel.data!.token!;
+
           await _saveUserData(
             token: token,
             isAdmin: user.role ?? false,
@@ -110,26 +141,24 @@ class AuthService {
             email: user.email,
             profilePicture: user.profilePicture,
           );
+
           return {
             'success': true,
             'data': userModel.data,
             'message': userModel.message ?? 'Registration successful',
           };
-        } else {
-          return {
-            'success': false,
-            'message': userModel.message ?? 'Registration failed',
-          };
         }
-      } else {
-        return {
-          'success': false,
-          'message':
-              jsonData['message'] ?? 'Server error: ${response.statusCode}',
-        };
       }
+
+      return {
+        'success': false,
+        'message': jsonData['message'] ?? 'Registration failed',
+      };
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: ${e.toString()}'};
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
     }
   }
 
@@ -137,14 +166,14 @@ class AuthService {
     required String email,
     required String password,
   }) async {
-    final url = Uri.parse('$baseUrl/login');
-    final body = jsonEncode({'email': email, 'password': password});
-
     try {
       final response = await http.post(
-        url,
+        Uri.parse('$baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
-        body: body,
+        body: jsonEncode({
+          'email': email,
+          'password': password,
+        }),
       );
 
       final jsonData = jsonDecode(response.body);
@@ -170,28 +199,25 @@ class AuthService {
             'data': userModel.data,
             'message': userModel.message ?? 'Login successful',
           };
-        } else {
-          return {
-            'success': false,
-            'message': userModel.message ?? 'Login failed',
-          };
         }
-      } else {
-        return {
-          'success': false,
-          'message':
-              jsonData['message'] ?? 'Server error: ${response.statusCode}',
-        };
       }
+
+      return {
+        'success': false,
+        'message': jsonData['message'] ?? 'Login failed',
+      };
     } catch (e) {
-      return {'success': false, 'message': 'Connection error: ${e.toString()}'};
+      return {
+        'success': false,
+        'message': 'Connection error: ${e.toString()}',
+      };
     }
   }
 
   Future<void> logout() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
+      final token = await SecureStorage.getToken();
 
       if (token != null) {
         try {
@@ -213,11 +239,6 @@ class AuthService {
 
   Future<bool> isLoggedIn() async {
     return checkSession();
-  }
-
-  Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
   }
 
   Future<bool> isAdmin() async {

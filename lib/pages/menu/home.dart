@@ -9,9 +9,13 @@ import 'eksplorasi.dart';
 import 'visit_notes.dart';
 import '../tiket/my_tickets_page.dart';
 import 'package:artefacto/service/auth_service.dart';
+import 'package:artefacto/service/api_service.dart';
+import 'dart:async';
+import 'package:provider/provider.dart';
+import '../../provider/user_provider.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key});
+  const HomePage({Key? key}) : super(key: key);
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -21,23 +25,73 @@ class _HomePageState extends State<HomePage> {
   int _selectedIndex = 0;
   late Future<Map<String, dynamic>> _userDataFuture;
   final AuthService _authService = AuthService();
+  Timer? _sessionCheckTimer;
+  final ApiService _apiService = ApiService();
+  Map<String, dynamic> _statistics = {};
+  List<dynamic> _temples = [];
+  bool _isLoading = true;
+  String _error = '';
 
   @override
   void initState() {
     super.initState();
     _userDataFuture = _loadUserData();
-    _checkSession();
+    // Check session every 5 minutes
+    _sessionCheckTimer =
+        Timer.periodic(const Duration(minutes: 5), (timer) async {
+      final isValid = await _checkAndRefreshSession();
+      if (!isValid && mounted) {
+        _showSessionExpiredDialog();
+      }
+    });
+    // Reset selected index if it's out of bounds
+    if (_selectedIndex >= 4) {
+      _selectedIndex = 0;
+    }
+    _loadData();
   }
 
-  Future<void> _checkSession() async {
-    final isValid = await _authService.checkSession();
-    if (!isValid && mounted) {
-      // Session expired, redirect to login
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const LoginPage()),
-      );
+  @override
+  void dispose() {
+    _sessionCheckTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<bool> _checkAndRefreshSession() async {
+    try {
+      final isValid = await _authService.checkSession();
+      if (!isValid) {
+        // Try to refresh the session
+        return await _authService.refreshSession();
+      }
+      return true;
+    } catch (e) {
+      print('Error checking session: $e');
+      return false;
     }
+  }
+
+  void _showSessionExpiredDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Sesi Berakhir'),
+        content: const Text('Sesi Anda telah berakhir. Silakan login kembali.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // Close dialog
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (context) => const LoginPage()),
+              );
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> _loadUserData() async {
@@ -70,6 +124,47 @@ class _HomePageState extends State<HomePage> {
 
   Widget _buildProfilePage(Map<String, dynamic> userData) {
     return ProfilePage(userData: userData);
+  }
+
+  Future<void> _loadData() async {
+    setState(() {
+      _isLoading = true;
+      _error = '';
+    });
+
+    try {
+      // Load statistics
+      final statsResult = await _apiService.getStatistics();
+      if (statsResult['success']) {
+        setState(() {
+          _statistics = statsResult['data'];
+        });
+      } else {
+        setState(() {
+          _error = 'Failed to load statistics';
+        });
+      }
+
+      // Load temples
+      final templesResult = await _apiService.getTemples();
+      if (templesResult['success']) {
+        setState(() {
+          _temples = templesResult['data']['data'] ?? [];
+        });
+      } else {
+        setState(() {
+          _error = 'Failed to load temples';
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _error = 'Error: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
@@ -132,23 +227,28 @@ class _HomePageState extends State<HomePage> {
         const List<BottomNavigationBarItem> navItems =
             <BottomNavigationBarItem>[
           BottomNavigationBarItem(
-            icon: Icon(Icons.home),
+            icon: Icon(Icons.home_outlined),
+            activeIcon: Icon(Icons.home),
             label: 'Home',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.confirmation_number_outlined),
+            activeIcon: Icon(Icons.confirmation_number),
             label: 'Tiket Saya',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.camera_alt),
-            label: 'Scan Artefak',
+            icon: Icon(Icons.camera_alt_outlined),
+            activeIcon: Icon(Icons.camera_alt),
+            label: 'Scan',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.book),
-            label: 'Catatan',
+            icon: Icon(Icons.book_outlined),
+            activeIcon: Icon(Icons.book),
+            label: 'Notes',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person),
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
             label: 'Profile',
           ),
         ];
@@ -180,21 +280,143 @@ class _HomePageState extends State<HomePage> {
               color: Colors.white,
               child: widgetOptions.elementAt(_selectedIndex),
             ),
-            bottomNavigationBar: BottomNavigationBar(
-              items: navItems,
-              currentIndex: _selectedIndex,
-              selectedItemColor: const Color(0xff233743),
-              unselectedItemColor: Colors.grey,
-              onTap: (index) {
-                setState(() {
-                  _selectedIndex = index;
-                });
-              },
-              type: BottomNavigationBarType.fixed,
+            bottomNavigationBar: Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.15),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
+                  ),
+                ],
+              ),
+              child: BottomNavigationBar(
+                items: navItems,
+                currentIndex: _selectedIndex,
+                selectedItemColor: const Color(0xff233743),
+                unselectedItemColor: Colors.grey,
+                selectedFontSize: 12,
+                unselectedFontSize: 12,
+                type: BottomNavigationBarType.fixed,
+                backgroundColor: Colors.white,
+                elevation: 0,
+                onTap: (index) {
+                  setState(() {
+                    _selectedIndex = index;
+                  });
+                },
+              ),
             ),
           ),
         );
       },
+    );
+  }
+
+  Widget _buildStatisticsCard() {
+    return Card(
+      elevation: 4,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Statistics',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildStatItem(
+                  'Total Temples',
+                  _statistics['totalTemples']?.toString() ?? '0',
+                  Icons.temple_buddhist,
+                ),
+                _buildStatItem(
+                  'Total Users',
+                  _statistics['totalUsers']?.toString() ?? '0',
+                  Icons.people,
+                ),
+                _buildStatItem(
+                  'Total Tickets',
+                  _statistics['totalTickets']?.toString() ?? '0',
+                  Icons.confirmation_number,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value, IconData icon) {
+    return Column(
+      children: [
+        Icon(icon, size: 32, color: Theme.of(context).primaryColor),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.grey[600],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplesList() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Popular Temples',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _temples.length,
+          itemBuilder: (context, index) {
+            final temple = _temples[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundImage: NetworkImage(temple['image'] ?? ''),
+                  onBackgroundImageError: (e, s) => {},
+                  child: temple['image'] == null
+                      ? const Icon(Icons.temple_buddhist)
+                      : null,
+                ),
+                title: Text(temple['name'] ?? 'Unknown Temple'),
+                subtitle: Text(temple['location'] ?? 'Unknown Location'),
+                trailing: const Icon(Icons.arrow_forward_ios),
+                onTap: () {
+                  // Navigate to temple details
+                },
+              ),
+            );
+          },
+        ),
+      ],
     );
   }
 }

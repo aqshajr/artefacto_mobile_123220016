@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:artefacto/model/user_model.dart';
-import 'package:artefacto/model/owned_tiket_model.dart';
 import 'package:artefacto/service/user_service.dart';
-import 'package:artefacto/service/owned_tiket_service.dart';
 import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:artefacto/pages/testimoni.dart';
 import 'edit_profile.dart';
@@ -22,9 +20,7 @@ class ProfilePage extends StatefulWidget {
 class _ProfilePageState extends State<ProfilePage> {
   User? user;
   bool isLoading = false;
-  bool isLoadingTickets = false;
   String? errorMessage;
-  List<OwnedTicket> ownedTickets = [];
 
   @override
   void initState() {
@@ -36,14 +32,11 @@ class _ProfilePageState extends State<ProfilePage> {
     try {
       dynamic userId = widget.userData['userId'];
 
-      // Handle case where userId might be an int
       if (userId is int) {
         userId = userId.toString();
       }
 
-      // First try to get from widget data
       if (userId == null || userId.toString().isEmpty) {
-        // Fallback to SharedPreferences
         final prefs = await SharedPreferences.getInstance();
         final cachedUserId = prefs.getString('userId');
 
@@ -51,11 +44,9 @@ class _ProfilePageState extends State<ProfilePage> {
           throw Exception('User ID not available in cache');
         }
 
-        // Update widget data with cached ID
         userId = cachedUserId;
       }
 
-      // Initialize user from available data
       user = User(
         id: int.tryParse(userId.toString()) ?? 0,
         username: widget.userData['username']?.toString() ?? '',
@@ -67,9 +58,7 @@ class _ProfilePageState extends State<ProfilePage> {
         throw Exception('Invalid user ID format');
       }
 
-      // Load fresh data from API
       await _loadUserData();
-      await _loadOwnedTickets();
     } catch (e) {
       setState(() {
         errorMessage = e.toString().replaceAll('Exception: ', '');
@@ -90,16 +79,14 @@ class _ProfilePageState extends State<ProfilePage> {
     });
 
     try {
-      final response = await UserApi.getUserById(user!.id!);
+      final userService = UserService();
+      final response = await userService.getCurrentUser();
 
-      if (response['success'] == true) {
-        final userModel = UserModel.fromJson(response);
-        if (userModel.data?.user != null) {
-          setState(() => user = userModel.data!.user);
-          await _updateLocalCache(user!);
-        }
+      if (response != null) {
+        setState(() => user = response);
+        await _updateLocalCache(user!);
       } else {
-        throw Exception(response['message'] ?? 'Failed to load user data');
+        throw Exception('Failed to load user data');
       }
     } catch (e) {
       setState(
@@ -109,32 +96,6 @@ class _ProfilePageState extends State<ProfilePage> {
       debugPrint("Error loading user: $e");
     } finally {
       setState(() => isLoading = false);
-    }
-  }
-
-  Future<void> _loadOwnedTickets() async {
-    if (user == null || user!.id == 0) {
-      setState(() => errorMessage = 'Cannot load tickets without valid user');
-      return;
-    }
-
-    setState(() {
-      isLoadingTickets = true;
-      errorMessage = null;
-    });
-
-    try {
-      final response = await OwnedTicketService.getOwnedTickets();
-      final filteredTickets = response.data.ownedTickets
-          .where((ticket) => ticket.userID == user?.id)
-          .toList();
-
-      setState(() => ownedTickets = filteredTickets);
-    } catch (e) {
-      debugPrint("Error loading tickets: $e");
-      setState(() => errorMessage = 'Failed to load tickets');
-    } finally {
-      setState(() => isLoadingTickets = false);
     }
   }
 
@@ -161,12 +122,13 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (confirmed == true) {
       try {
-        final response = await UserApi.deleteUser();
+        final userService = UserService();
+        final response = await userService.deleteUser();
 
-        if (response.status == 'sukses') {
+        if (response['success']) {
           await _logout();
         } else {
-          throw Exception(response.message ?? 'Gagal menghapus akun');
+          throw Exception(response['message'] ?? 'Gagal menghapus akun');
         }
       } catch (e) {
         if (!mounted) return;
@@ -198,9 +160,20 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Future<void> _refreshProfile() async {
-    await _loadUserData();
-    await _loadOwnedTickets();
+  Future<void> _navigateToEditProfile() async {
+    if (user == null) return;
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => EditProfilePage(user: user!),
+      ),
+    );
+
+    // Refresh data jika edit profile berhasil
+    if (result == true) {
+      await _loadUserData();
+    }
   }
 
   @override
@@ -221,6 +194,216 @@ class _ProfilePageState extends State<ProfilePage> {
               : user == null
                   ? _buildNoUserWidget()
                   : _buildProfileContent(),
+    );
+  }
+
+  Widget _buildProfileContent() {
+    return RefreshIndicator(
+      onRefresh: _loadUserData,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(height: 20),
+            _buildProfileHeader(),
+            const SizedBox(height: 32),
+            _buildProfileInfo(),
+            const SizedBox(height: 40),
+            _buildActionButtons(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildProfileHeader() {
+    return Column(
+      children: [
+        Stack(
+          children: [
+            CircleAvatar(
+              radius: 50,
+              backgroundColor: const Color(0xffF5F0DF),
+              backgroundImage: user?.profilePicture != null &&
+                      user!.profilePicture!.isNotEmpty
+                  ? NetworkImage(user!.profilePicture!)
+                  : null,
+              child:
+                  user?.profilePicture == null || user!.profilePicture!.isEmpty
+                      ? Icon(Icons.person, size: 50, color: Colors.grey[400])
+                      : null,
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileInfo() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xffF5F0DF),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Account Information',
+            style: GoogleFonts.playfairDisplay(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: const Color(0xff233743),
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildInfoItem(
+            icon: Icons.person_outline,
+            title: 'Username',
+            value: user?.username ?? 'Not set',
+          ),
+          const SizedBox(height: 12),
+          _buildInfoItem(
+            icon: Icons.email_outlined,
+            title: 'Email',
+            value: user?.email ?? 'Not set',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoItem({
+    required IconData icon,
+    required String title,
+    required String value,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: const Color(0xff233743)),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: GoogleFonts.poppins(
+                fontSize: 12,
+                color: Colors.grey[600],
+              ),
+            ),
+            Text(
+              value,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: const Color(0xff233743),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Column(
+      children: [
+        _buildActionButton(
+          icon: Icons.edit_outlined,
+          label: "Edit Profile",
+          color: const Color(0xff233743),
+          onPressed: _navigateToEditProfile,
+        ),
+        const SizedBox(height: 16),
+        _buildActionButton(
+          icon: Icons.feedback_outlined,
+          label: "Testimoni",
+          color: const Color(0xff233743),
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HelpPage()),
+            );
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildActionButton(
+          icon: Icons.logout,
+          label: "Logout",
+          color: Colors.grey[400]!,
+          onPressed: () => showDialog(
+            context: context,
+            builder: (context) => AlertDialog(
+              title: Text(
+                'Logout',
+                style: GoogleFonts.playfairDisplay(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              content: const Text('Apakah Anda yakin ingin keluar?'),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Batal'),
+                ),
+                TextButton(
+                  onPressed: _logout,
+                  child:
+                      const Text('Logout', style: TextStyle(color: Colors.red)),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        _buildActionButton(
+          icon: Icons.delete_outline,
+          label: "Hapus Akun",
+          color: Colors.red[400]!,
+          onPressed: _deleteAccount,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: color,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+            side: BorderSide(color: color.withOpacity(0.2)),
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -269,266 +452,6 @@ class _ProfilePageState extends State<ProfilePage> {
           ElevatedButton(
             onPressed: _initializeUser,
             child: const Text('Refresh'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildProfileContent() {
-    return RefreshIndicator(
-      onRefresh: _refreshProfile,
-      child: SingleChildScrollView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            const SizedBox(height: 20),
-            _buildProfileAvatar(),
-            const SizedBox(height: 20),
-            _buildUserInfo(),
-            const SizedBox(height: 40),
-            _buildActionButtons(),
-            const SizedBox(height: 30),
-            _buildTicketsSection(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProfileAvatar() {
-    return Stack(
-      children: [
-        CircleAvatar(
-          radius: 50,
-          backgroundColor: const Color(0xff233743),
-          backgroundImage:
-              user?.profilePicture != null && user!.profilePicture!.isNotEmpty
-                  ? NetworkImage(user!.profilePicture!)
-                  : null,
-          child: user?.profilePicture == null || user!.profilePicture!.isEmpty
-              ? const Icon(Icons.person, size: 60, color: Colors.white)
-              : null,
-        ),
-        if (user?.profilePicture != null && user!.profilePicture!.isNotEmpty)
-          Positioned(
-            bottom: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Icon(
-                Icons.camera_alt,
-                size: 20,
-                color: Colors.black,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildUserInfo() {
-    return Column(
-      children: [
-        Text(
-          user?.username ?? 'No username',
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: Color(0xff233743),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          user?.email ?? 'No email',
-          style: TextStyle(fontSize: 14, color: Colors.brown.shade300),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTicketsSection() {
-    if (isLoadingTickets && ownedTickets.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-
-    if (ownedTickets.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(16.0),
-        child: Text(
-          "Anda belum memiliki tiket",
-          style: TextStyle(color: Colors.grey),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8.0),
-          child: Text(
-            "Tiket Saya",
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Color(0xff233743),
-            ),
-          ),
-        ),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: ownedTickets.length,
-          itemBuilder: (context, index) {
-            return _buildTicketCard(ownedTickets[index]);
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTicketCard(OwnedTicket ticket) {
-    final temple = ticket.ticket.temple;
-    final priceFormat = NumberFormat.currency(
-      locale: 'id_ID',
-      symbol: 'Rp ',
-      decimalDigits: 0,
-    );
-
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              temple.title,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "Kode Unik: ${ticket.uniqueCode}",
-              style: const TextStyle(color: Colors.grey),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              "Status: ${ticket.usageStatus}",
-              style: TextStyle(
-                color: ticket.usageStatus.toLowerCase() == 'used'
-                    ? Colors.red
-                    : Colors.green,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Berlaku hingga: ${DateFormat('dd MMM yyyy').format(ticket.validDate)}",
-            ),
-            Text("Harga: ${priceFormat.format(ticket.ticket.price)}"),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildActionButtons() {
-    return Column(
-      children: [
-        _buildActionButton(
-          icon: Icons.edit,
-          label: "Edit Profile",
-          color: Colors.blue.shade100,
-          textColor: Colors.blue.shade800,
-          onPressed: () async {
-            final result = await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => EditProfilePage(user: user!),
-              ),
-            );
-            if (result == true) {
-              _refreshProfile();
-            }
-          },
-        ),
-        const SizedBox(height: 20),
-        _buildActionButton(
-          icon: Icons.feedback,
-          label: "Testimoni",
-          color: const Color(0xff233743),
-          textColor: Colors.white,
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (context) => const HelpPage()),
-            );
-          },
-        ),
-        const SizedBox(height: 20),
-        _buildActionButton(
-          icon: Icons.logout,
-          label: "Logout",
-          color: Colors.brown.shade100,
-          textColor: Colors.brown,
-          onPressed: _showLogoutDialog,
-        ),
-        const SizedBox(height: 20),
-        _buildActionButton(
-          icon: Icons.delete_forever,
-          label: "Hapus Akun",
-          color: Colors.red.shade100,
-          textColor: Colors.red,
-          onPressed: _deleteAccount,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required Color textColor,
-    required VoidCallback onPressed,
-  }) {
-    return ElevatedButton.icon(
-      icon: Icon(icon),
-      label: Text(label),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: color,
-        foregroundColor: textColor,
-        minimumSize: const Size.fromHeight(50),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-      onPressed: onPressed,
-    );
-  }
-
-  void _showLogoutDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _logout();
-            },
-            child: const Text('Yes'),
           ),
         ],
       ),

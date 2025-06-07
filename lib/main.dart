@@ -1,9 +1,12 @@
-import 'package:artefacto/pages/splash_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'model/visit_note_model.dart';
+import 'package:artefacto/pages/splash_page.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
+import 'package:artefacto/service/user_provider_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,16 +37,18 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false, // Menghilangkan tulisan debug
-      title: 'Artefacto',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Color(0xFFF61313),
+    return ChangeNotifierProvider(
+      create: (context) => UserProviderService(),
+      child: MaterialApp(
+        debugShowCheckedModeBanner: false,
+        title: 'Artefacto',
+        theme: ThemeData(
+          colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xff233743)),
+          useMaterial3: true,
+          textTheme: GoogleFonts.poppinsTextTheme(),
         ),
-        useMaterial3: true, // kalau pakai Material 3
+        home: const SplashPage(),
       ),
-      home: const Splashscreen(), // Halaman pertama
     );
   }
 }

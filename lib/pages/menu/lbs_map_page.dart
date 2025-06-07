@@ -6,21 +6,14 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../model/temple_model.dart';
-import '../../model/artifact_model.dart';
-import '../../service/artifact_service.dart';
 import '../../service/temple_service.dart';
-import 'detail_artifact.dart';
-
-enum LbsMode { temples, artifacts }
 
 class LBSMapPage extends StatefulWidget {
   final Temple candi;
-  final LbsMode mode;
 
   const LBSMapPage({
     super.key,
     required this.candi,
-    required this.mode,
   });
 
   @override
@@ -33,7 +26,7 @@ class _LBSMapPageState extends State<LBSMapPage> {
   Position? userPosition;
   LatLng? templeCoords;
   String? _templeAddress;
-  List<dynamic> nearbyItems = [];
+  List<Temple> nearbyTemples = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -49,54 +42,77 @@ class _LBSMapPageState extends State<LBSMapPage> {
   }
 
   Future<void> _initializeMap() async {
-    setState(() => isLoading = true);
+    if (mounted) setState(() => isLoading = true);
+
     try {
+      // Get user location first
       await _getUserLocation();
+
+      // Parse temple coordinates
       _parseTempleCoords();
 
+      if (templeCoords == null) {
+        throw 'Koordinat candi tidak tersedia';
+      }
+
+      // Get temple address if coordinates are available
       if (templeCoords != null) {
         final address = await _getAddressFromCoords(
             templeCoords!.latitude, templeCoords!.longitude);
-        setState(() => _templeAddress = address);
+        if (mounted) setState(() => _templeAddress = address);
       }
 
+      // Get nearby temples only if we have user position
       if (userPosition != null) {
-        if (widget.mode == LbsMode.temples) {
-          var temples = await TempleService.getNearbyTemples(
-            latitude: userPosition!.latitude,
-            longitude: userPosition!.longitude,
-          );
-          nearbyItems = temples
-              .where((t) => t.templeID != widget.candi.templeID)
-              .toList();
-        } else if (widget.mode == LbsMode.artifacts) {
-          nearbyItems = await ArtifactService.getNearbyArtifacts(
-              userPosition!.latitude, userPosition!.longitude);
+        var temples = await TempleService.getNearbyTemples(
+          latitude: userPosition!.latitude,
+          longitude: userPosition!.longitude,
+        );
+        if (mounted) {
+          setState(() {
+            nearbyTemples = temples
+                .where((t) => t.templeID != widget.candi.templeID)
+                .toList();
+          });
         }
       }
-      _setupMarkers();
+
+      // Setup markers after all data is gathered
+      if (mounted) {
+        setState(() {
+          _setupMarkers();
+          isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() => errorMessage = e.toString());
-    } finally {
-      setState(() => isLoading = false);
+      if (mounted) {
+        setState(() {
+          errorMessage = e.toString();
+          isLoading = false;
+        });
+      }
     }
   }
 
   Future<void> _getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) throw 'Layanan lokasi dinonaktifkan.';
+    if (!serviceEnabled) {
+      throw 'Layanan lokasi dinonaktifkan. Mohon aktifkan GPS.';
+    }
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw 'Izin lokasi ditolak.';
+        throw 'Izin lokasi ditolak. Aplikasi membutuhkan akses lokasi.';
       }
     }
     if (permission == LocationPermission.deniedForever) {
-      throw 'Izin lokasi ditolak permanen.';
+      throw 'Izin lokasi ditolak permanen. Mohon ubah pengaturan di Settings.';
     }
-    userPosition = await Geolocator.getCurrentPosition();
+
+    Position position = await Geolocator.getCurrentPosition();
+    setState(() => userPosition = position);
   }
 
   void _parseTempleCoords() {
@@ -120,12 +136,9 @@ class _LBSMapPageState extends State<LBSMapPage> {
       final placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
         final p = placemarks.first;
-
-        // Cek jika nama jalan adalah "plus code" (contoh: "95VW+WG9")
         bool isPlusCode = p.street?.contains('+') ?? false;
 
         final addressParts = [
-          // Jika bukan plus code, tampilkan nama jalan. Jika ya, lewati.
           if (!isPlusCode) p.street,
           p.subLocality,
           p.locality,
@@ -161,6 +174,8 @@ class _LBSMapPageState extends State<LBSMapPage> {
 
   void _setupMarkers() {
     Set<Marker> newMarkers = {};
+
+    // Add user location marker
     if (userPosition != null) {
       newMarkers.add(Marker(
         markerId: const MarkerId('user_location'),
@@ -169,27 +184,73 @@ class _LBSMapPageState extends State<LBSMapPage> {
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       ));
     }
+
+    // Add main temple marker
     if (templeCoords != null) {
       newMarkers.add(Marker(
-        markerId: MarkerId(widget.candi.templeID.toString()),
+        markerId: MarkerId('temple_${widget.candi.templeID}'),
         position: templeCoords!,
-        infoWindow: InfoWindow(title: widget.candi.title ?? 'Lokasi Candi'),
+        infoWindow: InfoWindow(
+          title: widget.candi.title ?? 'Lokasi Candi',
+          snippet: _templeAddress,
+        ),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
       ));
     }
-    setState(() => markers = newMarkers);
-    _animateCameraToBounds();
+
+    // Add nearby temples markers
+    for (var temple in nearbyTemples) {
+      if (temple.latitude != null && temple.longitude != null) {
+        newMarkers.add(Marker(
+          markerId: MarkerId('nearby_${temple.templeID}'),
+          position: LatLng(temple.latitude!, temple.longitude!),
+          infoWindow: InfoWindow(
+            title: temple.title ?? 'Candi Terdekat',
+            snippet: temple.location,
+          ),
+          icon:
+              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+          onTap: () {
+            // Show temple details when marker is tapped
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TempleDetailPage(temple: temple),
+              ),
+            );
+          },
+        ));
+      }
+    }
+
+    markers = newMarkers;
   }
 
   void _animateCameraToBounds() {
-    if (mapController == null || userPosition == null || templeCoords == null) {
-      if (mapController != null && templeCoords != null) {
+    if (mapController == null) return;
+
+    if (templeCoords == null) {
+      // If no temple coordinates, center on user location
+      if (userPosition != null) {
         mapController!.animateCamera(
-          CameraUpdate.newLatLngZoom(templeCoords!, 14.0),
+          CameraUpdate.newLatLngZoom(
+            LatLng(userPosition!.latitude, userPosition!.longitude),
+            14.0,
+          ),
         );
       }
       return;
     }
 
+    // If we have temple coordinates but no user position
+    if (userPosition == null) {
+      mapController!.animateCamera(
+        CameraUpdate.newLatLngZoom(templeCoords!, 14.0),
+      );
+      return;
+    }
+
+    // If we have both positions, show both
     final bounds = LatLngBounds(
       southwest: LatLng(
         userPosition!.latitude < templeCoords!.latitude
@@ -210,16 +271,12 @@ class _LBSMapPageState extends State<LBSMapPage> {
     );
 
     mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 60.0),
+      CameraUpdate.newLatLngBounds(bounds, 100.0),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    String title = widget.mode == LbsMode.temples
-        ? 'Lokasi & Candi Terdekat'
-        : 'Lokasi & Artefak Terdekat';
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Lokasi Candi',
@@ -231,22 +288,40 @@ class _LBSMapPageState extends State<LBSMapPage> {
         children: [
           GoogleMap(
             onMapCreated: (controller) {
-              mapController = controller;
-              if (!isLoading) _animateCameraToBounds();
+              setState(() {
+                mapController = controller;
+                if (!isLoading) _animateCameraToBounds();
+              });
             },
             initialCameraPosition: CameraPosition(
               target: templeCoords ?? _initialCameraPosition,
-              zoom: 12,
+              zoom: 14,
             ),
             markers: markers,
             mapToolbarEnabled: true,
+            myLocationEnabled: true,
             myLocationButtonEnabled: true,
+            zoomControlsEnabled: true,
+            compassEnabled: true,
           ),
-          if (isLoading) const Center(child: CircularProgressIndicator()),
+          if (isLoading)
+            Container(
+              color: Colors.white.withOpacity(0.8),
+              child: const Center(child: CircularProgressIndicator()),
+            ),
           if (errorMessage != null)
             Center(
+              child: Container(
+                margin: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
                 child: Text(errorMessage!,
-                    style: const TextStyle(color: Colors.red))),
+                    style: const TextStyle(color: Colors.red)),
+              ),
+            ),
           if (!isLoading && errorMessage == null) _buildDraggableSheet(),
         ],
       ),
@@ -254,15 +329,6 @@ class _LBSMapPageState extends State<LBSMapPage> {
   }
 
   Widget _buildDraggableSheet() {
-    String sheetTitle, emptyMessage;
-    if (widget.mode == LbsMode.temples) {
-      sheetTitle = 'Candi Terdekat';
-      emptyMessage = 'Tidak ada candi terdekat\ndalam jangkauan 50 km';
-    } else {
-      sheetTitle = 'Artefak Terdekat';
-      emptyMessage = 'Tidak ada artefak terdekat\ndalam jangkauan 5 km';
-    }
-
     return DraggableScrollableSheet(
       initialChildSize: 0.3,
       minChildSize: 0.15,
@@ -329,17 +395,17 @@ class _LBSMapPageState extends State<LBSMapPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
                 child: Text(
-                  sheetTitle,
+                  'Candi Terdekat',
                   style: GoogleFonts.playfairDisplay(
                       fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
-              if (nearbyItems.isEmpty)
+              if (nearbyTemples.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20.0),
                     child: Text(
-                      emptyMessage,
+                      'Tidak ada candi terdekat\ndalam jangkauan 50 km',
                       style: GoogleFonts.poppins(),
                       textAlign: TextAlign.center,
                     ),
@@ -349,15 +415,10 @@ class _LBSMapPageState extends State<LBSMapPage> {
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: nearbyItems.length,
+                  itemCount: nearbyTemples.length,
                   itemBuilder: (context, index) {
-                    final item = nearbyItems[index];
-                    if (item is Temple) {
-                      return _buildTempleTile(item);
-                    } else if (item is Artifact) {
-                      return _buildArtifactTile(item);
-                    }
-                    return const SizedBox.shrink();
+                    final temple = nearbyTemples[index];
+                    return _buildTempleTile(temple);
                   },
                 ),
             ],
@@ -388,30 +449,6 @@ class _LBSMapPageState extends State<LBSMapPage> {
           context,
           MaterialPageRoute(
               builder: (context) => TempleDetailPage(temple: temple))),
-    );
-  }
-
-  Widget _buildArtifactTile(Artifact artifact) {
-    return ListTile(
-      leading: ClipRRect(
-        borderRadius: BorderRadius.circular(8.0),
-        child: (artifact.imageUrl != null && artifact.imageUrl!.isNotEmpty)
-            ? Image.network(artifact.imageUrl!,
-                width: 60, height: 60, fit: BoxFit.cover)
-            : Container(
-                width: 60,
-                height: 60,
-                color: Colors.grey[200],
-                child: const Icon(Icons.inventory_2_outlined)),
-      ),
-      title: Text(artifact.title,
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
-      subtitle: Text('Candi: ${artifact.templeTitle}',
-          style: GoogleFonts.poppins(fontSize: 12)),
-      onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(
-              builder: (context) => ArtifactDetailPage(artifact: artifact))),
     );
   }
 }

@@ -72,28 +72,29 @@ class User {
 
   factory User.fromJson(Map<String, dynamic> json) {
     return User(
-      id: json['id'] is int ? json['id'] : int.tryParse(json['id'].toString()),
+      id: json['userID'] ?? json['id'],
       username: json['username'],
       email: json['email'],
       profilePicture: json['profilePicture'],
       role: json['role'] is bool ? json['role'] : json['role'] == 1,
-      createdAt: json['createdAt'],
-      updatedAt: json['updatedAt'],
+      createdAt: json['created_at'] ?? json['createdAt'],
+      updatedAt: json['updated_at'] ?? json['updatedAt'],
     );
   }
 
   Map<String, dynamic> toJson() {
     final Map<String, dynamic> data = <String, dynamic>{};
-    if (id != null) data['id'] = id;
+    if (id != null) data['userID'] = id;
     if (username != null) data['username'] = username;
     if (email != null) data['email'] = email;
     if (currentPassword != null) data['currentPassword'] = currentPassword;
     if (newPassword != null) data['newPassword'] = newPassword;
-    if (confirmNewPassword != null) data['confirmNewPassword'] = confirmNewPassword;
+    if (confirmNewPassword != null)
+      data['confirmNewPassword'] = confirmNewPassword;
     if (profilePicture != null) data['profilePicture'] = profilePicture;
     if (role != null) data['role'] = role;
-    if (createdAt != null) data['createdAt'] = createdAt;
-    if (updatedAt != null) data['updatedAt'] = updatedAt;
+    if (createdAt != null) data['created_at'] = createdAt;
+    if (updatedAt != null) data['updated_at'] = updatedAt;
     return data;
   }
 }
