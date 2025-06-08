@@ -52,6 +52,8 @@ dependencies:
   # Google Maps untuk menampilkan peta dengan pin
   google_maps_flutter: ^2.5.3
   flutter_dotenv: ^5.1.0
+  # Sensor untuk shake detection
+  sensors_plus: ^6.0.1
   # Database lokal
   hive: ^2.2.3
   hive_flutter: ^1.1.0

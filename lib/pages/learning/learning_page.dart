@@ -1,10 +1,14 @@
 import 'package:artefacto/model/artifact_model.dart';
 import 'package:artefacto/model/temple_model.dart';
 import 'package:artefacto/pages/menu/detail_temples.dart';
+import 'package:artefacto/pages/menu/detail_artifact.dart';
 import 'package:artefacto/service/artifact_service.dart';
 import 'package:artefacto/service/temple_service.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:sensors_plus/sensors_plus.dart';
+import 'dart:async';
+import 'dart:math';
 
 // Helper class untuk menyimpan progres
 class TempleLearningProgress {
@@ -41,6 +45,12 @@ class _LearningPageState extends State<LearningPage> {
   String _errorMessage = '';
   final TextEditingController _searchController = TextEditingController();
 
+  // Shake sensor variables
+  StreamSubscription<AccelerometerEvent>? _accelerometerSubscription;
+  double _lastShakeTime = 0;
+  bool _isShakeDetectionActive = false;
+  bool _isProcessingShake = false;
+
   @override
   void initState() {
     super.initState();
@@ -50,6 +60,7 @@ class _LearningPageState extends State<LearningPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    _accelerometerSubscription?.cancel();
     super.dispose();
   }
 
@@ -111,6 +122,313 @@ class _LearningPageState extends State<LearningPage> {
     }
   }
 
+  void _showShakeInstructions() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.lightbulb, color: Colors.orange, size: 28),
+              SizedBox(width: 8),
+              Text('Eksplorasi Artefak',
+                  style:
+                      GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Temukan artefak baru yang belum pernah kamu baca!',
+                style: GoogleFonts.poppins(
+                    fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+              SizedBox(height: 12),
+              Row(
+                children: [
+                  Icon(Icons.phone_android, color: Colors.blue, size: 24),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Goyangkan HP untuk memunculkan artefak secara acak',
+                      style: GoogleFonts.poppins(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(Icons.auto_awesome, color: Colors.purple, size: 24),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Hanya artefak yang belum dibaca yang akan muncul',
+                      style: GoogleFonts.poppins(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Batal', style: GoogleFonts.poppins()),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _startShakeDetection();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+              ),
+              child: Text('Mulai Eksplorasi',
+                  style: GoogleFonts.poppins(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _startShakeDetection() {
+    setState(() {
+      _isShakeDetectionActive = true;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.vibration, color: Colors.white),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Shake detection aktif! Goyangkan HP untuk eksplorasi.',
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.orange,
+        duration: Duration(seconds: 3),
+        action: SnackBarAction(
+          label: 'Stop',
+          textColor: Colors.white,
+          onPressed: _stopShakeDetection,
+        ),
+      ),
+    );
+
+    _accelerometerSubscription =
+        accelerometerEventStream().listen((AccelerometerEvent event) {
+      _handleShakeDetection(event);
+    });
+
+    // Auto stop after 60 seconds
+    Timer(Duration(seconds: 60), () {
+      if (_isShakeDetectionActive) {
+        _stopShakeDetection();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Shake detection berhenti otomatis.',
+                style: GoogleFonts.poppins(fontSize: 14)),
+            backgroundColor: Colors.grey[600],
+          ),
+        );
+      }
+    });
+  }
+
+  void _stopShakeDetection() {
+    setState(() {
+      _isShakeDetectionActive = false;
+    });
+    _accelerometerSubscription?.cancel();
+  }
+
+  void _handleShakeDetection(AccelerometerEvent event) {
+    if (!_isShakeDetectionActive || _isProcessingShake) return;
+
+    double currentTime = DateTime.now().millisecondsSinceEpoch.toDouble();
+
+    // Calculate shake intensity
+    double acceleration =
+        sqrt(event.x * event.x + event.y * event.y + event.z * event.z);
+    double threshold = 15.0; // Shake threshold
+
+    if (acceleration > threshold) {
+      if (currentTime - _lastShakeTime > 1000) {
+        // Cooldown 1 second
+        _lastShakeTime = currentTime;
+        _triggerRandomArtifact();
+      }
+    }
+  }
+
+  Future<void> _triggerRandomArtifact() async {
+    if (_isProcessingShake) return;
+
+    setState(() {
+      _isProcessingShake = true;
+    });
+
+    try {
+      // Get unread artifacts
+      final artifacts = await ArtifactService.getArtifacts();
+      final unreadArtifacts =
+          artifacts.where((artifact) => !artifact.isRead).toList();
+
+      if (unreadArtifacts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Wow! Kamu sudah membaca semua artefak! 🎉',
+                      style: GoogleFonts.poppins(fontSize: 14)),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+        return;
+      }
+
+      // Pick random unread artifact
+      final random = Random();
+      final randomArtifact =
+          unreadArtifacts[random.nextInt(unreadArtifacts.length)];
+
+      // Show discovery animation/dialog
+      await _showArtifactDiscovery(randomArtifact);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal memuat artefak: $e',
+              style: GoogleFonts.poppins(fontSize: 14)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      setState(() {
+        _isProcessingShake = false;
+      });
+    }
+  }
+
+  Future<void> _showArtifactDiscovery(Artifact artifact) async {
+    // Stop shake detection
+    _stopShakeDetection();
+
+    // Show discovery dialog
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Container(
+            padding: EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.auto_awesome, color: Colors.orange, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Artefak Ditemukan!',
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.orange,
+                  ),
+                ),
+                SizedBox(height: 12),
+                if (artifact.imageUrl?.isNotEmpty == true)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Image.network(
+                      artifact.imageUrl!,
+                      height: 120,
+                      width: 120,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                SizedBox(height: 12),
+                Text(
+                  artifact.title,
+                  style: GoogleFonts.playfairDisplay(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 8),
+                Text(
+                  'Candi: ${artifact.templeTitle}',
+                  style: GoogleFonts.poppins(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        child: Text('Nanti Saja', style: GoogleFonts.poppins()),
+                      ),
+                    ),
+                    SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          _navigateToArtifactDetail(artifact);
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8)),
+                        ),
+                        child: Text('Baca Sekarang',
+                            style: GoogleFonts.poppins(color: Colors.white)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _navigateToArtifactDetail(Artifact artifact) {
+    // Navigate to artifact detail page
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ArtifactDetailPage(artifact: artifact),
+      ),
+    ).then((_) => _refreshData());
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -120,6 +438,16 @@ class _LearningPageState extends State<LearningPage> {
             style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
         backgroundColor: Colors.white,
         surfaceTintColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: Icon(
+              Icons.lightbulb,
+              color: _isShakeDetectionActive ? Colors.orange : Colors.grey,
+            ),
+            onPressed: _showShakeInstructions,
+            tooltip: 'Eksplorasi Artefak',
+          ),
+        ],
       ),
       body: Column(
         children: [
