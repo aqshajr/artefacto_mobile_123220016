@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:artefacto/pages/menu/detail_temples.dart';
 import 'package:flutter/material.dart';
 import 'package:geocoding/geocoding.dart';
@@ -6,14 +7,21 @@ import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../model/temple_model.dart';
+import '../../model/artifact_model.dart';
+import '../../service/artifact_service.dart';
 import '../../service/temple_service.dart';
+import 'detail_artifact.dart';
+
+enum LbsMode { temples, artifacts }
 
 class LBSMapPage extends StatefulWidget {
   final Temple candi;
+  final LbsMode mode;
 
   const LBSMapPage({
     super.key,
     required this.candi,
+    required this.mode,
   });
 
   @override
@@ -26,7 +34,7 @@ class _LBSMapPageState extends State<LBSMapPage> {
   Position? userPosition;
   LatLng? templeCoords;
   String? _templeAddress;
-  List<Temple> nearbyTemples = [];
+  List<dynamic> nearbyItems = [];
   bool isLoading = true;
   String? errorMessage;
 
@@ -39,95 +47,147 @@ class _LBSMapPageState extends State<LBSMapPage> {
   void initState() {
     super.initState();
     _initializeMap();
+
+    // Set timeout for map loading
+    Timer(const Duration(seconds: 10), () {
+      if (mounted && isLoading) {
+        print('[LBSMapPage] Map loading timeout - showing fallback');
+        setState(() {
+          isLoading = false;
+          errorMessage =
+              'Peta tidak dapat dimuat. Silakan coba lagi atau periksa koneksi internet.';
+        });
+      }
+    });
   }
 
   Future<void> _initializeMap() async {
-    if (mounted) setState(() => isLoading = true);
+    setState(() => isLoading = true);
+    print('[LBSMapPage] Starting map initialization...');
 
     try {
-      // Get user location first
+      print('[LBSMapPage] Getting user location...');
       await _getUserLocation();
+      print('[LBSMapPage] User position: $userPosition');
 
-      // Parse temple coordinates
+      print('[LBSMapPage] Parsing temple coordinates...');
       _parseTempleCoords();
+      print('[LBSMapPage] Temple coordinates: $templeCoords');
+      print('[LBSMapPage] Temple data: ${widget.candi.toString()}');
 
-      if (templeCoords == null) {
-        throw 'Koordinat candi tidak tersedia';
-      }
-
-      // Get temple address if coordinates are available
       if (templeCoords != null) {
+        print('[LBSMapPage] Getting address for temple coordinates...');
         final address = await _getAddressFromCoords(
             templeCoords!.latitude, templeCoords!.longitude);
-        if (mounted) setState(() => _templeAddress = address);
-      }
+        print('[LBSMapPage] Temple address: $address');
+        setState(() => _templeAddress = address);
+      } else {
+        print('[LBSMapPage] WARNING: No temple coordinates found!');
+        print('[LBSMapPage] Temple lat: ${widget.candi.latitude}');
+        print('[LBSMapPage] Temple lng: ${widget.candi.longitude}');
+        print('[LBSMapPage] Temple locationUrl: ${widget.candi.locationUrl}');
 
-      // Get nearby temples only if we have user position
-      if (userPosition != null) {
-        var temples = await TempleService.getNearbyTemples(
-          latitude: userPosition!.latitude,
-          longitude: userPosition!.longitude,
-        );
-        if (mounted) {
-          setState(() {
-            nearbyTemples = temples
-                .where((t) => t.templeID != widget.candi.templeID)
-                .toList();
-          });
+        // Try to use a default coordinate if temple coordinates not found
+        if (userPosition != null) {
+          print(
+              '[LBSMapPage] Using user position as fallback for temple location');
+          templeCoords =
+              LatLng(userPosition!.latitude, userPosition!.longitude);
+        } else {
+          print('[LBSMapPage] Using default Indonesia coordinates as fallback');
+          templeCoords = _initialCameraPosition;
         }
       }
 
-      // Setup markers after all data is gathered
-      if (mounted) {
-        setState(() {
-          _setupMarkers();
-          isLoading = false;
-        });
+      if (userPosition != null) {
+        print('[LBSMapPage] Getting nearby items for mode: ${widget.mode}');
+
+        if (widget.mode == LbsMode.temples) {
+          print('[LBSMapPage] Fetching nearby temples...');
+          var temples = await TempleService.getNearbyTemples(
+            latitude: userPosition!.latitude,
+            longitude: userPosition!.longitude,
+          );
+          nearbyItems = temples
+              .where((t) => t.templeID != widget.candi.templeID)
+              .toList();
+          print('[LBSMapPage] Found ${nearbyItems.length} nearby temples');
+        } else if (widget.mode == LbsMode.artifacts) {
+          print('[LBSMapPage] Fetching nearby artifacts...');
+          nearbyItems = await ArtifactService.getNearbyArtifacts(
+              userPosition!.latitude, userPosition!.longitude);
+          print('[LBSMapPage] Found ${nearbyItems.length} nearby artifacts');
+        }
+      } else {
+        print('[LBSMapPage] WARNING: No user position available!');
       }
+
+      print('[LBSMapPage] Setting up markers...');
+      _setupMarkers();
+      print(
+          '[LBSMapPage] Markers setup complete. Total markers: ${markers.length}');
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          errorMessage = e.toString();
-          isLoading = false;
-        });
-      }
+      print('[LBSMapPage] ERROR during initialization: $e');
+      setState(() => errorMessage = e.toString());
+    } finally {
+      setState(() => isLoading = false);
+      print('[LBSMapPage] Map initialization complete. Loading: false');
     }
   }
 
   Future<void> _getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      throw 'Layanan lokasi dinonaktifkan. Mohon aktifkan GPS.';
-    }
+    if (!serviceEnabled) throw 'Layanan lokasi dinonaktifkan.';
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        throw 'Izin lokasi ditolak. Aplikasi membutuhkan akses lokasi.';
+        throw 'Izin lokasi ditolak.';
       }
     }
     if (permission == LocationPermission.deniedForever) {
-      throw 'Izin lokasi ditolak permanen. Mohon ubah pengaturan di Settings.';
+      throw 'Izin lokasi ditolak permanen.';
     }
-
-    Position position = await Geolocator.getCurrentPosition();
-    setState(() => userPosition = position);
+    userPosition = await Geolocator.getCurrentPosition();
   }
 
   void _parseTempleCoords() {
+    print('[LBSMapPage] _parseTempleCoords called');
+
     if (widget.candi.latitude != null && widget.candi.longitude != null) {
+      print(
+          '[LBSMapPage] Using direct lat/lng: ${widget.candi.latitude}, ${widget.candi.longitude}');
       templeCoords = LatLng(widget.candi.latitude!, widget.candi.longitude!);
       return;
     }
+
+    print('[LBSMapPage] No direct coordinates, trying to parse from URL...');
     final url = widget.candi.locationUrl;
-    if (url == null) return;
+    print('[LBSMapPage] Location URL: $url');
+
+    if (url == null) {
+      print('[LBSMapPage] No location URL available');
+      return;
+    }
+
     final regex = RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)');
     final match = regex.firstMatch(url);
+
     if (match != null) {
       final lat = double.tryParse(match.group(1)!);
       final lng = double.tryParse(match.group(2)!);
-      if (lat != null && lng != null) templeCoords = LatLng(lat, lng);
+      print('[LBSMapPage] Parsed coordinates from URL: $lat, $lng');
+
+      if (lat != null && lng != null) {
+        templeCoords = LatLng(lat, lng);
+        print(
+            '[LBSMapPage] Successfully parsed temple coordinates: $templeCoords');
+      } else {
+        print('[LBSMapPage] Failed to parse lat/lng values from URL');
+      }
+    } else {
+      print('[LBSMapPage] No coordinate match found in URL');
     }
   }
 
@@ -136,9 +196,12 @@ class _LBSMapPageState extends State<LBSMapPage> {
       final placemarks = await placemarkFromCoordinates(lat, lng);
       if (placemarks.isNotEmpty) {
         final p = placemarks.first;
+
+        // Cek jika nama jalan adalah "plus code" (contoh: "95VW+WG9")
         bool isPlusCode = p.street?.contains('+') ?? false;
 
         final addressParts = [
+          // Jika bukan plus code, tampilkan nama jalan. Jika ya, lewati.
           if (!isPlusCode) p.street,
           p.subLocality,
           p.locality,
@@ -173,84 +236,65 @@ class _LBSMapPageState extends State<LBSMapPage> {
   }
 
   void _setupMarkers() {
+    print('[LBSMapPage] _setupMarkers called');
     Set<Marker> newMarkers = {};
 
-    // Add user location marker
     if (userPosition != null) {
+      print(
+          '[LBSMapPage] Adding user location marker at: ${userPosition!.latitude}, ${userPosition!.longitude}');
       newMarkers.add(Marker(
         markerId: const MarkerId('user_location'),
         position: LatLng(userPosition!.latitude, userPosition!.longitude),
         infoWindow: const InfoWindow(title: 'Lokasi Anda'),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
       ));
+    } else {
+      print('[LBSMapPage] No user position available for marker');
     }
 
-    // Add main temple marker
     if (templeCoords != null) {
+      print(
+          '[LBSMapPage] Adding temple marker at: ${templeCoords!.latitude}, ${templeCoords!.longitude}');
+      print('[LBSMapPage] Temple title: ${widget.candi.title}');
       newMarkers.add(Marker(
-        markerId: MarkerId('temple_${widget.candi.templeID}'),
+        markerId: MarkerId(widget.candi.templeID.toString()),
         position: templeCoords!,
-        infoWindow: InfoWindow(
-          title: widget.candi.title ?? 'Lokasi Candi',
-          snippet: _templeAddress,
-        ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        infoWindow: InfoWindow(title: widget.candi.title ?? 'Lokasi Candi'),
       ));
+    } else {
+      print('[LBSMapPage] No temple coordinates available for marker');
     }
 
-    // Add nearby temples markers
-    for (var temple in nearbyTemples) {
-      if (temple.latitude != null && temple.longitude != null) {
-        newMarkers.add(Marker(
-          markerId: MarkerId('nearby_${temple.templeID}'),
-          position: LatLng(temple.latitude!, temple.longitude!),
-          infoWindow: InfoWindow(
-            title: temple.title ?? 'Candi Terdekat',
-            snippet: temple.location,
-          ),
-          icon:
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-          onTap: () {
-            // Show temple details when marker is tapped
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TempleDetailPage(temple: temple),
-              ),
-            );
-          },
-        ));
-      }
-    }
-
-    markers = newMarkers;
+    print('[LBSMapPage] Total markers created: ${newMarkers.length}');
+    setState(() => markers = newMarkers);
+    print(
+        '[LBSMapPage] Markers set in state. Calling _animateCameraToBounds...');
+    _animateCameraToBounds();
   }
 
   void _animateCameraToBounds() {
-    if (mapController == null) return;
+    print('[LBSMapPage] _animateCameraToBounds called');
+    print('[LBSMapPage] MapController: ${mapController != null}');
+    print('[LBSMapPage] UserPosition: ${userPosition != null}');
+    print('[LBSMapPage] TempleCoords: ${templeCoords != null}');
 
-    if (templeCoords == null) {
-      // If no temple coordinates, center on user location
-      if (userPosition != null) {
+    if (mapController == null || userPosition == null || templeCoords == null) {
+      if (mapController != null && templeCoords != null) {
+        print('[LBSMapPage] Animating to temple position: $templeCoords');
+        mapController!.animateCamera(
+          CameraUpdate.newLatLngZoom(templeCoords!, 14.0),
+        );
+      } else if (mapController != null && userPosition != null) {
+        print(
+            '[LBSMapPage] Animating to user position: ${userPosition!.latitude}, ${userPosition!.longitude}');
         mapController!.animateCamera(
           CameraUpdate.newLatLngZoom(
-            LatLng(userPosition!.latitude, userPosition!.longitude),
-            14.0,
-          ),
+              LatLng(userPosition!.latitude, userPosition!.longitude), 14.0),
         );
       }
       return;
     }
 
-    // If we have temple coordinates but no user position
-    if (userPosition == null) {
-      mapController!.animateCamera(
-        CameraUpdate.newLatLngZoom(templeCoords!, 14.0),
-      );
-      return;
-    }
-
-    // If we have both positions, show both
     final bounds = LatLngBounds(
       southwest: LatLng(
         userPosition!.latitude < templeCoords!.latitude
@@ -271,12 +315,16 @@ class _LBSMapPageState extends State<LBSMapPage> {
     );
 
     mapController!.animateCamera(
-      CameraUpdate.newLatLngBounds(bounds, 100.0),
+      CameraUpdate.newLatLngBounds(bounds, 60.0),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    String title = widget.mode == LbsMode.temples
+        ? 'Lokasi & Candi Terdekat'
+        : 'Lokasi & Artefak Terdekat';
+
     return Scaffold(
       appBar: AppBar(
         title: Text('Lokasi Candi',
@@ -288,9 +336,24 @@ class _LBSMapPageState extends State<LBSMapPage> {
         children: [
           GoogleMap(
             onMapCreated: (controller) {
-              setState(() {
-                mapController = controller;
-                if (!isLoading) _animateCameraToBounds();
+              print('[LBSMapPage] GoogleMap onMapCreated called');
+              mapController = controller;
+              print(
+                  '[LBSMapPage] Map controller set. Loading status: $isLoading');
+
+              // Force set loading to false when map is created
+              if (mounted) {
+                setState(() => isLoading = false);
+                print(
+                    '[LBSMapPage] Map loaded successfully, loading set to false');
+              }
+
+              // Wait a bit then animate to bounds
+              Future.delayed(const Duration(milliseconds: 500), () {
+                if (mounted && mapController != null) {
+                  print('[LBSMapPage] Delayed camera animation');
+                  _animateCameraToBounds();
+                }
               });
             },
             initialCameraPosition: CameraPosition(
@@ -298,28 +361,62 @@ class _LBSMapPageState extends State<LBSMapPage> {
               zoom: 14,
             ),
             markers: markers,
-            mapToolbarEnabled: true,
+            mapToolbarEnabled: false, // Disable to avoid rendering issues
+            myLocationButtonEnabled: false, // Disable to avoid rendering issues
+            onTap: (LatLng position) {
+              print('[LBSMapPage] Map tapped at: $position');
+            },
+            mapType: MapType.normal,
+            rotateGesturesEnabled: true,
+            scrollGesturesEnabled: true,
+            zoomGesturesEnabled: true,
             myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            zoomControlsEnabled: true,
-            compassEnabled: true,
           ),
           if (isLoading)
-            Container(
-              color: Colors.white.withOpacity(0.8),
-              child: const Center(child: CircularProgressIndicator()),
+            const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('Memuat peta...'),
+                ],
+              ),
             ),
           if (errorMessage != null)
             Center(
               child: Container(
-                margin: const EdgeInsets.all(20),
+                margin: const EdgeInsets.all(16),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Colors.red.shade50,
                   borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.red.shade200),
                 ),
-                child: Text(errorMessage!,
-                    style: const TextStyle(color: Colors.red)),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.error_outline,
+                        color: Colors.red.shade700, size: 48),
+                    const SizedBox(height: 8),
+                    Text(
+                      errorMessage!,
+                      style: TextStyle(color: Colors.red.shade700),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: () {
+                        setState(() {
+                          errorMessage = null;
+                          isLoading = true;
+                        });
+                        _initializeMap();
+                      },
+                      child: const Text('Coba Lagi'),
+                    ),
+                  ],
+                ),
               ),
             ),
           if (!isLoading && errorMessage == null) _buildDraggableSheet(),
@@ -329,6 +426,15 @@ class _LBSMapPageState extends State<LBSMapPage> {
   }
 
   Widget _buildDraggableSheet() {
+    String sheetTitle, emptyMessage;
+    if (widget.mode == LbsMode.temples) {
+      sheetTitle = 'Candi Terdekat';
+      emptyMessage = 'Tidak ada candi terdekat\ndalam jangkauan 50 km';
+    } else {
+      sheetTitle = 'Artefak Terdekat';
+      emptyMessage = 'Tidak ada artefak terdekat\ndalam jangkauan 5 km';
+    }
+
     return DraggableScrollableSheet(
       initialChildSize: 0.3,
       minChildSize: 0.15,
@@ -372,13 +478,15 @@ class _LBSMapPageState extends State<LBSMapPage> {
                   children: [
                     Expanded(
                       child: ElevatedButton.icon(
-                        icon:
-                            const Icon(Icons.map_outlined, color: Colors.white),
-                        label: Text('Buka di Maps',
+                        icon: const Icon(Icons.directions, color: Colors.white),
+                        label: Text('Navigasi ke Lokasi',
                             style: GoogleFonts.poppins(color: Colors.white)),
                         onPressed: () {
-                          final url =
-                              'https://www.google.com/maps/search/?api=1&query=${templeCoords!.latitude},${templeCoords!.longitude}';
+                          // Gunakan URL asli dari API (widget.candi.locationUrl)
+                          final url = widget.candi.locationUrl?.isNotEmpty ==
+                                  true
+                              ? widget.candi.locationUrl!
+                              : 'https://www.google.com/maps/dir/?api=1&destination=${templeCoords!.latitude},${templeCoords!.longitude}';
                           _launchMapsUrl(url);
                         },
                         style: ElevatedButton.styleFrom(
@@ -395,17 +503,17 @@ class _LBSMapPageState extends State<LBSMapPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12.0),
                 child: Text(
-                  'Candi Terdekat',
+                  sheetTitle,
                   style: GoogleFonts.playfairDisplay(
                       fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
-              if (nearbyTemples.isEmpty)
+              if (nearbyItems.isEmpty)
                 Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 20.0),
                     child: Text(
-                      'Tidak ada candi terdekat\ndalam jangkauan 50 km',
+                      emptyMessage,
                       style: GoogleFonts.poppins(),
                       textAlign: TextAlign.center,
                     ),
@@ -415,10 +523,15 @@ class _LBSMapPageState extends State<LBSMapPage> {
                 ListView.builder(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
-                  itemCount: nearbyTemples.length,
+                  itemCount: nearbyItems.length,
                   itemBuilder: (context, index) {
-                    final temple = nearbyTemples[index];
-                    return _buildTempleTile(temple);
+                    final item = nearbyItems[index];
+                    if (item is Temple) {
+                      return _buildTempleTile(item);
+                    } else if (item is Artifact) {
+                      return _buildArtifactTile(item);
+                    }
+                    return const SizedBox.shrink();
                   },
                 ),
             ],
@@ -449,6 +562,30 @@ class _LBSMapPageState extends State<LBSMapPage> {
           context,
           MaterialPageRoute(
               builder: (context) => TempleDetailPage(temple: temple))),
+    );
+  }
+
+  Widget _buildArtifactTile(Artifact artifact) {
+    return ListTile(
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(8.0),
+        child: (artifact.imageUrl != null && artifact.imageUrl!.isNotEmpty)
+            ? Image.network(artifact.imageUrl!,
+                width: 60, height: 60, fit: BoxFit.cover)
+            : Container(
+                width: 60,
+                height: 60,
+                color: Colors.grey[200],
+                child: const Icon(Icons.inventory_2_outlined)),
+      ),
+      title: Text(artifact.title,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+      subtitle: Text('Candi: ${artifact.templeTitle}',
+          style: GoogleFonts.poppins(fontSize: 12)),
+      onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+              builder: (context) => ArtifactDetailPage(artifact: artifact))),
     );
   }
 }

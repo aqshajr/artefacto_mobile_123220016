@@ -11,8 +11,6 @@ import '../tiket/my_tickets_page.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/service/api_service.dart';
 import 'dart:async';
-import 'package:provider/provider.dart';
-import '../../provider/user_provider.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({Key? key}) : super(key: key);
@@ -36,19 +34,29 @@ class _HomePageState extends State<HomePage> {
   void initState() {
     super.initState();
     _userDataFuture = _loadUserData();
-    // Check session every 5 minutes
-    _sessionCheckTimer =
-        Timer.periodic(const Duration(minutes: 5), (timer) async {
-      final isValid = await _checkAndRefreshSession();
-      if (!isValid && mounted) {
-        _showSessionExpiredDialog();
-      }
-    });
+
+    // DISABLE automatic session checking that causes immediate logout
+    // Session will be checked only when user navigates or performs actions
+    // _sessionCheckTimer = Timer.periodic(const Duration(minutes: 5), (timer) async {
+    //   final isValid = await _checkAndRefreshSession();
+    //   if (!isValid && mounted) {
+    //     _showSessionExpiredDialog();
+    //   }
+    // });
+
     // Reset selected index if it's out of bounds
     if (_selectedIndex >= 4) {
       _selectedIndex = 0;
     }
-    _loadData();
+
+    // Load data with delay to ensure stable session
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        _loadData();
+      }
+    });
+
+    print('HomePage initState completed - No automatic session checks');
   }
 
   @override
@@ -95,6 +103,7 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<Map<String, dynamic>> _loadUserData() async {
+    print('[HomePage] _loadUserData called');
     try {
       final prefs = await SharedPreferences.getInstance();
 
@@ -110,12 +119,15 @@ class _HomePageState extends State<HomePage> {
         throw Exception('User ID not found');
       }
 
-      return {
+      final userData = {
         'userId': userId,
         'username': prefs.getString('username') ?? 'Guest',
         'email': prefs.getString('email') ?? '',
         'profilePicture': prefs.getString('profilePicture') ?? '',
       };
+
+      print('[HomePage] Loaded user data from cache: ${userData['username']}');
+      return userData;
     } catch (e) {
       debugPrint('Error loading user data: $e');
       rethrow;
@@ -133,30 +145,85 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-      // Load statistics
-      final statsResult = await _apiService.getStatistics();
-      if (statsResult['success']) {
-        setState(() {
-          _statistics = statsResult['data'];
-        });
+      print('[HomePage] Loading temples and artifacts...');
+
+      // Load temples and artifacts directly (same as EksplorasiPage)
+      final templesResult = await _apiService.getTemples();
+      final artifactsResult = await _apiService.getArtifacts();
+
+      print('[HomePage] Temples result: $templesResult');
+      print('[HomePage] Artifacts result: $artifactsResult');
+
+      int templesCount = 0;
+      int artifactsCount = 0;
+      List<dynamic> templesList = [];
+
+      // Parse temples response
+      if (templesResult['success']) {
+        final templesData = templesResult['data'];
+        print('[HomePage] Temples data structure: $templesData');
+
+        if (templesData is List) {
+          templesList = templesData;
+          templesCount = templesData.length;
+        } else if (templesData is Map) {
+          if (templesData['data'] is List) {
+            templesList = templesData['data'];
+            templesCount = (templesData['data'] as List).length;
+          } else if (templesData['status'] == 'sukses' &&
+              templesData['data'] is List) {
+            templesList = templesData['data'];
+            templesCount = (templesData['data'] as List).length;
+          } else if (templesData['status'] == 'sukses' &&
+              templesData['data'] is Map &&
+              templesData['data']['temples'] is List) {
+            templesList = templesData['data']['temples'];
+            templesCount = (templesData['data']['temples'] as List).length;
+          }
+        }
+        print('[HomePage] Parsed temples count: $templesCount');
       } else {
-        setState(() {
-          _error = 'Failed to load statistics';
-        });
+        print('[HomePage] Temples failed: ${templesResult['message']}');
       }
 
-      // Load temples
-      final templesResult = await _apiService.getTemples();
-      if (templesResult['success']) {
-        setState(() {
-          _temples = templesResult['data']['data'] ?? [];
-        });
+      // Parse artifacts response
+      if (artifactsResult['success']) {
+        final artifactsData = artifactsResult['data'];
+        print('[HomePage] Artifacts data structure: $artifactsData');
+
+        if (artifactsData is List) {
+          artifactsCount = artifactsData.length;
+        } else if (artifactsData is Map) {
+          if (artifactsData['data'] is List) {
+            artifactsCount = (artifactsData['data'] as List).length;
+          } else if (artifactsData['status'] == 'sukses' &&
+              artifactsData['data'] is List) {
+            artifactsCount = (artifactsData['data'] as List).length;
+          } else if (artifactsData['status'] == 'sukses' &&
+              artifactsData['data'] is Map &&
+              artifactsData['data']['artifacts'] is List) {
+            artifactsCount =
+                (artifactsData['data']['artifacts'] as List).length;
+          }
+        }
+        print('[HomePage] Parsed artifacts count: $artifactsCount');
       } else {
-        setState(() {
-          _error = 'Failed to load temples';
-        });
+        print('[HomePage] Artifacts failed: ${artifactsResult['message']}');
       }
+
+      // Update state with parsed data
+      setState(() {
+        _temples = templesList;
+        _statistics = {
+          'totalTemples': templesCount,
+          'totalArtifacts': artifactsCount,
+        };
+      });
+
+      print(
+          '[HomePage] Final counts - Temples: $templesCount, Artifacts: $artifactsCount');
     } catch (e) {
+      print('[HomePage] Error loading data: $e');
       setState(() {
         _error = 'Error: ${e.toString()}';
       });
@@ -164,6 +231,20 @@ class _HomePageState extends State<HomePage> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  // Method to refresh user data - called from ProfilePage
+  Future<void> refreshUserData() async {
+    print('[HomePage] refreshUserData called from ProfilePage');
+    if (mounted) {
+      print('[HomePage] Refreshing _userDataFuture...');
+      setState(() {
+        _userDataFuture = _loadUserData();
+      });
+      print('[HomePage] _userDataFuture refresh completed');
+    } else {
+      print('[HomePage] Widget not mounted, skipping refresh');
     }
   }
 
@@ -221,7 +302,10 @@ class _HomePageState extends State<HomePage> {
           const MyTicketsPage(),
           const CameraPage(),
           const VisitNotesPage(),
-          _buildProfilePage(userData),
+          ProfilePage(
+            userData: userData,
+            onProfileUpdated: refreshUserData, // Add callback
+          ),
         ];
 
         const List<BottomNavigationBarItem> navItems =

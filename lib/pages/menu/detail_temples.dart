@@ -201,7 +201,10 @@ class _TempleDetailPageState extends State<TempleDetailPage> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (context) => LBSMapPage(candi: temple),
+              builder: (context) => LBSMapPage(
+                candi: temple,
+                mode: LbsMode.temples,
+              ),
             ),
           );
         },

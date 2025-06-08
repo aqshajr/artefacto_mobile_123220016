@@ -1,8 +1,9 @@
 import 'package:artefacto/pages/tiket/ticket_selected_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:artefacto/service/temple_service.dart';
-import 'package:artefacto/service/artifact_service.dart';
+import 'package:artefacto/service/api_service.dart';
+import 'package:artefacto/service/auth_service.dart';
+import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'detail_artifact.dart';
@@ -24,6 +25,8 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
   int totalTemples = 0;
   int totalArtifacts = 0;
   String? _username;
+  final ApiService _apiService = ApiService();
+  final AuthService _authService = AuthService();
 
   // Ganti dengan path yang benar jika Anda punya aset logo, atau set null jika tidak ada.
   final String? logoAssetPath = null; // 'assets/images/logo_artefacto.png';
@@ -32,7 +35,13 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
   void initState() {
     super.initState();
     _username = widget.username;
-    _loadInitialData();
+    // Re-enable data loading with delay for stability
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _loadInitialData();
+      }
+    });
+    print('EksplorasiPage initState completed - Safe data loading enabled');
   }
 
   Future<void> _loadInitialData() async {
@@ -59,18 +68,107 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
     });
 
     try {
-      final templeResponse = await TempleService.getTemples();
-      final artifactResponse = await ArtifactService.getArtifacts();
+      print('[EksplorasiPage] Loading temples and artifacts...');
+      final templeResponse = await _apiService.getTemples();
+      final artifactResponse = await _apiService.getArtifacts();
+
+      print('[EksplorasiPage] Temple response: $templeResponse');
+      print('[EksplorasiPage] Artifact response: $artifactResponse');
 
       if (mounted) {
         setState(() {
-          if (templeResponse.isNotEmpty) {
-            totalTemples = templeResponse.length;
+          if (templeResponse['success']) {
+            final temples = templeResponse['data'];
+            print('[EksplorasiPage] Temples data type: ${temples.runtimeType}');
+            print('[EksplorasiPage] Temples data: $temples');
+
+            if (temples is List) {
+              totalTemples = temples.length;
+              print(
+                  '[EksplorasiPage] Found ${temples.length} temples (direct list)');
+            } else if (temples is Map) {
+              // Try common backend response structures
+              if (temples['data'] != null && temples['data'] is List) {
+                totalTemples = (temples['data'] as List).length;
+                print(
+                    '[EksplorasiPage] Found ${totalTemples} temples (data.data)');
+              } else if (temples['temples'] != null &&
+                  temples['temples'] is List) {
+                totalTemples = (temples['temples'] as List).length;
+                print(
+                    '[EksplorasiPage] Found ${totalTemples} temples (data.temples)');
+              } else if (temples['status'] == 'sukses' &&
+                  temples['data'] != null) {
+                // Handle Laravel/standard structure: {status: 'sukses', data: [...]}
+                final innerData = temples['data'];
+                if (innerData is List) {
+                  totalTemples = innerData.length;
+                  print(
+                      '[EksplorasiPage] Found ${totalTemples} temples (sukses.data list)');
+                } else if (innerData is Map && innerData['temples'] is List) {
+                  totalTemples = (innerData['temples'] as List).length;
+                  print(
+                      '[EksplorasiPage] Found ${totalTemples} temples (sukses.data.temples)');
+                }
+              } else {
+                print(
+                    '[EksplorasiPage] Unknown temple data structure. Keys: ${temples.keys}');
+                print('[EksplorasiPage] Full response: $temples');
+              }
+            }
+          } else {
+            print(
+                '[EksplorasiPage] Temple response not successful: ${templeResponse['message']}');
           }
-          if (artifactResponse.isNotEmpty) {
-            totalArtifacts = artifactResponse.length;
+
+          if (artifactResponse['success']) {
+            final artifacts = artifactResponse['data'];
+            print(
+                '[EksplorasiPage] Artifacts data type: ${artifacts.runtimeType}');
+            print('[EksplorasiPage] Artifacts data: $artifacts');
+
+            if (artifacts is List) {
+              totalArtifacts = artifacts.length;
+              print(
+                  '[EksplorasiPage] Found ${artifacts.length} artifacts (direct list)');
+            } else if (artifacts is Map) {
+              // Try common backend response structures
+              if (artifacts['data'] != null && artifacts['data'] is List) {
+                totalArtifacts = (artifacts['data'] as List).length;
+                print(
+                    '[EksplorasiPage] Found ${totalArtifacts} artifacts (data.data)');
+              } else if (artifacts['artifacts'] != null &&
+                  artifacts['artifacts'] is List) {
+                totalArtifacts = (artifacts['artifacts'] as List).length;
+                print(
+                    '[EksplorasiPage] Found ${totalArtifacts} artifacts (data.artifacts)');
+              } else if (artifacts['status'] == 'sukses' &&
+                  artifacts['data'] != null) {
+                // Handle Laravel/standard structure: {status: 'sukses', data: [...]}
+                final innerData = artifacts['data'];
+                if (innerData is List) {
+                  totalArtifacts = innerData.length;
+                  print(
+                      '[EksplorasiPage] Found ${totalArtifacts} artifacts (sukses.data list)');
+                } else if (innerData is Map && innerData['artifacts'] is List) {
+                  totalArtifacts = (innerData['artifacts'] as List).length;
+                  print(
+                      '[EksplorasiPage] Found ${totalArtifacts} artifacts (sukses.data.artifacts)');
+                }
+              } else {
+                print(
+                    '[EksplorasiPage] Unknown artifact data structure. Keys: ${artifacts.keys}');
+                print('[EksplorasiPage] Full response: $artifacts');
+              }
+            }
+          } else {
+            print(
+                '[EksplorasiPage] Artifact response not successful: ${artifactResponse['message']}');
           }
+
           isLoading = false;
+          print(
+              '[EksplorasiPage] Final counts - Temples: $totalTemples, Artifacts: $totalArtifacts');
         });
       }
     } catch (e) {
@@ -80,6 +178,14 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
           errorMessage = 'Gagal memuat data statistik: ${e.toString()}';
           isLoading = false;
         });
+
+        // If session expired, redirect to login
+        if (e.toString().contains('Session expired')) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+          );
+        }
       }
       debugPrint('Error loading counts: $e');
     }

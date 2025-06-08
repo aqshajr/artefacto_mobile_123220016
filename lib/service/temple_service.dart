@@ -215,26 +215,60 @@ class TempleService {
     required double longitude,
     double radiusInKm = 50.0,
   }) async {
+    print('[TempleService] getNearbyTemples called');
+    print('[TempleService] User location: $latitude, $longitude');
+    print('[TempleService] Search radius: ${radiusInKm}km');
+
     final allTemples = await getTemples();
+    print('[TempleService] Total temples fetched: ${allTemples.length}');
+
     final List<Map<String, dynamic>> templesWithDistance = [];
 
     for (final temple in allTemples) {
-      if (temple.latitude != null && temple.longitude != null) {
+      print('[TempleService] Processing temple: ${temple.title}');
+      print(
+          '[TempleService] Temple coordinates: ${temple.latitude}, ${temple.longitude}');
+      print('[TempleService] Temple locationUrl: ${temple.locationUrl}');
+
+      // Try to parse coordinates from URL if lat/lng are null
+      double? lat = temple.latitude;
+      double? lng = temple.longitude;
+
+      if ((lat == null || lng == null) && temple.locationUrl != null) {
+        print('[TempleService] Trying to parse coordinates from URL...');
+        final regex = RegExp(r'@(-?\d+\.\d+),(-?\d+\.\d+)');
+        final match = regex.firstMatch(temple.locationUrl!);
+        if (match != null) {
+          lat = double.tryParse(match.group(1)!);
+          lng = double.tryParse(match.group(2)!);
+          print('[TempleService] Parsed coordinates from URL: $lat, $lng');
+        }
+      }
+
+      if (lat != null && lng != null) {
         final double distanceInMeters = Geolocator.distanceBetween(
           latitude,
           longitude,
-          temple.latitude!,
-          temple.longitude!,
+          lat!,
+          lng!,
         );
 
         final double distanceInKm = distanceInMeters / 1000;
+        print(
+            '[TempleService] Distance to ${temple.title}: ${distanceInKm.toStringAsFixed(2)}km');
 
         if (distanceInKm <= radiusInKm) {
           templesWithDistance.add({
             'temple': temple,
             'distance': distanceInKm,
           });
+          print('[TempleService] Temple ${temple.title} added to nearby list');
+        } else {
+          print(
+              '[TempleService] Temple ${temple.title} too far (${distanceInKm.toStringAsFixed(2)}km > ${radiusInKm}km)');
         }
+      } else {
+        print('[TempleService] Temple ${temple.title} has no coordinates');
       }
     }
 
@@ -242,7 +276,11 @@ class TempleService {
     templesWithDistance.sort(
         (a, b) => (a['distance'] as double).compareTo(b['distance'] as double));
 
+    final nearbyTemples =
+        templesWithDistance.map((e) => e['temple'] as Temple).toList();
+    print('[TempleService] Returning ${nearbyTemples.length} nearby temples');
+
     // Return only the temple objects
-    return templesWithDistance.map((e) => e['temple'] as Temple).toList();
+    return nearbyTemples;
   }
 }

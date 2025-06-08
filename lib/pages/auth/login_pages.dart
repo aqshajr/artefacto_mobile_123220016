@@ -37,43 +37,81 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  // Simpan user ke SharedPreferences
-  Future<void> _saveUserToPrefs(UserData userData) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('userData', jsonEncode(userData.toJson()));
-  }
-
   Future<void> _handleLogin() async {
     if (_loginFormKey.currentState!.validate()) {
       setState(() => _isLoading = true);
 
-      final result = await _authService.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-      );
-
-      setState(() => _isLoading = false);
-
-      if (!mounted) return;
-
-      if (result['success'] == true) {
-        final userData = result['data'] as UserData;
-        await _saveUserToPrefs(userData);
-
-        final isAdmin = userData.user?.role ?? false;
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                isAdmin ? const AdminDashboardPage() : const HomePage(),
-          ),
+      try {
+        final result = await _authService.login(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
         );
-      } else {
+
+        setState(() => _isLoading = false);
+
+        if (!mounted) return;
+
+        print('Login result: $result');
+
+        if (result['success'] == true) {
+          // Get user data from the response
+          final data = result['data'];
+          final user = data['user'];
+          final isAdmin = user['role'] == true || user['role'] == 1;
+
+          print('User role: ${user['role']}, isAdmin: $isAdmin');
+
+          // Debug: Test token immediately after login
+          print('=== ABOUT TO TEST TOKEN ===');
+          await _authService.debugTokenTest();
+          print('=== TOKEN TEST COMPLETED ===');
+
+          // Add delay before navigation to ensure token is stable
+          await Future.delayed(const Duration(milliseconds: 500));
+
+          print('=== ABOUT TO NAVIGATE ===');
+          // Navigate based on role
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  isAdmin ? const AdminDashboardPage() : const HomePage(),
+            ),
+          );
+          print('=== NAVIGATION COMPLETED ===');
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Login berhasil! Selamat datang, ${user['username'] ?? 'User'}',
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                result['message'] ??
+                    'Login gagal. Periksa email dan password Anda.',
+                style: GoogleFonts.poppins(fontSize: 14),
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() => _isLoading = false);
+
+        if (!mounted) return;
+
+        print('Login error: $e');
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              result['message'] ?? 'Login failed',
+              'Terjadi kesalahan: ${e.toString()}',
               style: GoogleFonts.poppins(fontSize: 14),
             ),
             backgroundColor: Colors.red,

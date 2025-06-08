@@ -4,9 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:artefacto/model/user_model.dart';
-import 'package:artefacto/service/user_service.dart';
-import 'package:provider/provider.dart';
-import 'package:artefacto/service/user_provider_service.dart';
+import 'package:artefacto/service/auth_service.dart';
 
 class EditProfilePage extends StatefulWidget {
   final User user;
@@ -20,6 +18,7 @@ class EditProfilePage extends StatefulWidget {
 class _EditProfilePageState extends State<EditProfilePage> {
   final _editFormKey = GlobalKey<FormState>();
   final _picker = ImagePicker();
+  final _authService = AuthService();
 
   late TextEditingController _nameController;
   late TextEditingController _emailController;
@@ -90,9 +89,6 @@ class _EditProfilePageState extends State<EditProfilePage> {
         _newProfileImage = file;
         _imageError = null;
       });
-
-      // Upload image immediately after picking
-      await _uploadProfilePicture();
     } catch (e) {
       setState(() {
         _imageError = 'Gagal memilih gambar: $e';
@@ -100,57 +96,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
     }
   }
 
-  Future<void> _uploadProfilePicture() async {
-    if (_newProfileImage == null) return;
-
-    setState(() {
-      _isUpdating = true;
-      _errorMessage = null;
-      _successMessage = null;
-    });
-
-    try {
-      final userService = UserService();
-      final response =
-          await userService.updateProfilePicture(_newProfileImage!);
-
-      if (response['success']) {
-        setState(() {
-          _successMessage = 'Profil berhasil diperbarui!';
-        });
-
-        // Reset image
-        setState(() {
-          _newProfileImage = null;
-        });
-
-        // Refresh user data
-        await Provider.of<UserProviderService>(context, listen: false)
-            .refreshUser();
-        if (mounted) {
-          Navigator.pop(context);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Profile updated successfully'),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } else {
-        throw Exception(response['message'] ?? 'Gagal memperbarui profil');
-      }
-    } catch (e) {
-      setState(() {
-        _errorMessage = e.toString().replaceAll('Exception: ', '');
-      });
-    } finally {
-      setState(() => _isUpdating = false);
-    }
-  }
-
   Future<void> _handleSubmit() async {
     if (!_editFormKey.currentState!.validate()) return;
     if (_imageError != null) return;
+
+    // Check if email is being changed
+    final originalEmail = widget.user.email;
+    final newEmail = _emailController.text.trim();
+    final isEmailChanged = originalEmail != newEmail && newEmail.isNotEmpty;
+
+    // Validate current password is required for email changes OR new password
+    if ((isEmailChanged || _newPasswordController.text.isNotEmpty) &&
+        _currentPasswordController.text.isEmpty) {
+      setState(() {
+        _errorMessage =
+            'Password saat ini diperlukan untuk mengubah email atau password';
+      });
+      return;
+    }
 
     // Validate password match if new password is provided
     if (_newPasswordController.text.isNotEmpty &&
@@ -167,12 +130,66 @@ class _EditProfilePageState extends State<EditProfilePage> {
       _successMessage = null;
     });
 
+    print('[EditProfilePage] Submitting profile update...');
+    print('[EditProfilePage] Original email: $originalEmail');
+    print('[EditProfilePage] New email: $newEmail');
+    print('[EditProfilePage] Email changed: $isEmailChanged');
+    print(
+        '[EditProfilePage] Current password provided: ${_currentPasswordController.text.isNotEmpty}');
+    print(
+        '[EditProfilePage] New password provided: ${_newPasswordController.text.isNotEmpty}');
+
+    // If email is being changed, validate current password first
+    if (isEmailChanged && _currentPasswordController.text.isNotEmpty) {
+      print(
+          '[EditProfilePage] Email change detected, validating current password first...');
+
+      // Try to validate current password by making a test login request
+      try {
+        final authService = AuthService();
+        final testResponse = await authService.login(
+          email: originalEmail ?? '',
+          password: _currentPasswordController.text,
+        );
+
+        print(
+            '[EditProfilePage] Password validation response: ${testResponse['success']}');
+
+        if (!testResponse['success']) {
+          setState(() {
+            _errorMessage = 'Password saat ini salah';
+            _isUpdating = false; // Reset loading state
+          });
+          return;
+        }
+      } catch (e) {
+        print('[EditProfilePage] Password validation error: $e');
+        setState(() {
+          _errorMessage = 'Gagal memvalidasi password saat ini';
+          _isUpdating = false; // Reset loading state
+        });
+        return;
+      }
+    }
+
     try {
-      final userService = UserService();
-      final response = await userService.updateProfile(
-        username: _nameController.text.trim(),
-        email: _emailController.text.trim(),
+      final response = await _authService.updateProfile(
+        username: _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()
+            : null,
+        email: _emailController.text.trim().isNotEmpty
+            ? _emailController.text.trim()
+            : null,
+        currentPassword: _currentPasswordController.text.isNotEmpty
+            ? _currentPasswordController.text
+            : null,
+        newPassword: _newPasswordController.text.isNotEmpty
+            ? _newPasswordController.text
+            : null,
+        profilePicture: _newProfileImage,
       );
+
+      print('[EditProfilePage] Profile update response: $response');
 
       if (response['success']) {
         setState(() {
@@ -189,14 +206,13 @@ class _EditProfilePageState extends State<EditProfilePage> {
           _newProfileImage = null;
         });
 
-        // Refresh user data
-        await Provider.of<UserProviderService>(context, listen: false)
-            .refreshUser();
         if (mounted) {
-          Navigator.pop(context);
+          print(
+              '[EditProfilePage] Profile update successful, returning true to ProfilePage');
+          Navigator.pop(context, true); // Return true to indicate success
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Profile updated successfully'),
+              content: Text('Profil berhasil diperbarui!'),
               backgroundColor: Colors.green,
             ),
           );
@@ -313,7 +329,9 @@ class _EditProfilePageState extends State<EditProfilePage> {
                               : widget.user.profilePicture != null &&
                                       widget.user.profilePicture!.isNotEmpty
                                   ? Image.network(
-                                      widget.user.profilePicture!,
+                                      '${widget.user.profilePicture!}?t=${DateTime.now().millisecondsSinceEpoch}', // Add cache buster
+                                      key: ValueKey(
+                                          '${widget.user.profilePicture!}_${DateTime.now().millisecondsSinceEpoch}'), // Force refresh
                                       fit: BoxFit.cover,
                                       errorBuilder:
                                           (context, error, stackTrace) => Icon(
@@ -436,9 +454,17 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     },
                   ),
                   validator: (value) {
-                    if (_newPasswordController.text.isNotEmpty &&
+                    // Check if email is being changed
+                    final originalEmail = widget.user.email;
+                    final newEmail = _emailController.text.trim();
+                    final isEmailChanged =
+                        originalEmail != newEmail && newEmail.isNotEmpty;
+
+                    // Current password required for email changes OR new password
+                    if ((isEmailChanged ||
+                            _newPasswordController.text.isNotEmpty) &&
                         (value == null || value.isEmpty)) {
-                      return 'Password saat ini wajib diisi untuk mengubah password';
+                      return 'Password saat ini wajib diisi untuk mengubah email atau password';
                     }
                     return null;
                   },
@@ -496,7 +522,7 @@ class _EditProfilePageState extends State<EditProfilePage> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 24), // Reduced from 40 to 24
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
