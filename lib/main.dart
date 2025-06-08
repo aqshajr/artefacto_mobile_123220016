@@ -3,10 +3,12 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'model/visit_note_model.dart';
+import 'model/notification_history.dart';
 import 'package:artefacto/pages/splash_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:artefacto/service/user_provider_service.dart';
+import 'package:artefacto/service/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -17,14 +19,19 @@ Future<void> main() async {
   // Initialize Hive
   await Hive.initFlutter();
   Hive.registerAdapter(VisitNoteAdapter());
+  Hive.registerAdapter(NotificationHistoryAdapter());
 
   // Delete existing box if exists
   if (await Hive.boxExists('visit_notes')) {
     await Hive.deleteBoxFromDisk('visit_notes');
   }
 
-  // Open box with new schema
+  // Open boxes
   await Hive.openBox<VisitNote>('visit_notes');
+  await Hive.openBox<NotificationHistory>('notification_history');
+
+  // Initialize NotificationService
+  await NotificationService.initialize();
 
   // Load environment variables
   await dotenv.load(fileName: ".env");

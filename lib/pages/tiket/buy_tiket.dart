@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../../model/tiket_model.dart';
 import '../../model/transaction_model.dart';
 import '../../service/transaksi_service.dart';
+import '../../service/notification_service.dart';
 import '../menu/currency_converter_page.dart';
 import '../menu/home.dart';
 
@@ -103,14 +104,23 @@ class _TicketPurchasePageState extends State<TicketPurchasePage> {
 
       if (mounted) {
         if (response.status == 'sukses') {
+          // AUTO SCHEDULE NOTIFICATION for newly purchased ticket
+          try {
+            await NotificationService.autoScheduleWhenTicketPurchased();
+            print('[BuyTicket] ✅ Auto-scheduled notifications for new ticket');
+          } catch (e) {
+            print('[BuyTicket] ❌ Error auto-scheduling: $e');
+          }
+
           // Show success message
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Tiket berhasil dibeli!',
+                'Tiket berhasil dibeli! Notifikasi akan muncul pada hari H jam 8 pagi.',
                 style: GoogleFonts.poppins(),
               ),
               backgroundColor: Colors.green,
+              duration: const Duration(seconds: 4),
             ),
           );
 

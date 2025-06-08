@@ -4,6 +4,11 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:artefacto/model/user_model.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/service/api_service.dart';
+import 'package:artefacto/service/notification_service.dart';
+import 'package:artefacto/service/notification_history_service.dart';
+import 'package:artefacto/model/notification_history.dart';
+import 'package:artefacto/model/owned_tiket_model.dart';
+import 'package:artefacto/service/tiket_service.dart';
 import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:artefacto/pages/testimoni.dart';
 import 'edit_profile.dart';
@@ -184,6 +189,141 @@ class _ProfilePageState extends State<ProfilePage> {
       MaterialPageRoute(builder: (context) => const LoginPage()),
       (route) => false,
     );
+  }
+
+  Future<void> _testNotification() async {
+    // Show dialog to choose test type
+    final testType = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Test Notifikasi',
+            style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.bold)),
+        content:
+            Text('Pilih jenis test notifikasi:', style: GoogleFonts.poppins()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'immediate'),
+            child: Text('Langsung', style: GoogleFonts.poppins()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, 'scheduled'),
+            child: Text('Scheduled (5 detik)', style: GoogleFonts.poppins()),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Batal', style: GoogleFonts.poppins()),
+          ),
+        ],
+      ),
+    );
+
+    if (testType == null) return;
+
+    try {
+      if (testType == 'immediate') {
+        await NotificationService.showTestNotification();
+      } else {
+        await NotificationService.showTestScheduledNotification();
+      }
+
+      if (!mounted) return;
+
+      final count = await NotificationService.getScheduledNotificationsCount();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              testType == 'immediate'
+                  ? 'Test notification berhasil dikirim! Scheduled: $count'
+                  : 'Scheduled notification berhasil dijadwalkan! Total: $count',
+              style: GoogleFonts.poppins(fontSize: 14)),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal mengirim test notification: $e',
+              style: GoogleFonts.poppins(fontSize: 14)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _addTestNotificationHistory() async {
+    try {
+      await NotificationHistoryService.initialize();
+
+      // Create sample notification histories
+      final testNotifications = [
+        NotificationHistory(
+          notificationId: DateTime.now().millisecondsSinceEpoch,
+          ticketId: 12345,
+          title: '🎫 Pengingat Tiket Besok',
+          body:
+              'Jangan lupa! Tiket Candi Borobudur akan aktif besok. Persiapkan kunjungan Anda!',
+          type: 'H-1',
+          scheduledTime: DateTime.now().subtract(const Duration(hours: 2)),
+          sentTime: DateTime.now().subtract(const Duration(hours: 2)),
+          ticketTitle: 'Tiket Wisata Candi Borobudur',
+          templeTitle: 'Candi Borobudur',
+          isRead: false,
+        ),
+        NotificationHistory(
+          notificationId: DateTime.now().millisecondsSinceEpoch + 1,
+          ticketId: 12346,
+          title: '🎉 Tiket Siap Digunakan!',
+          body:
+              'Hari ini adalah hari kunjungan Anda ke Candi Prambanan. Selamat menikmati wisata!',
+          type: 'Day-H',
+          scheduledTime: DateTime.now().subtract(const Duration(days: 1)),
+          sentTime: DateTime.now().subtract(const Duration(days: 1)),
+          ticketTitle: 'Tiket Wisata Candi Prambanan',
+          templeTitle: 'Candi Prambanan',
+          isRead: true,
+        ),
+        NotificationHistory(
+          notificationId: DateTime.now().millisecondsSinceEpoch + 2,
+          ticketId: 12347,
+          title: '⚠️ Tiket Akan Berakhir',
+          body: 'Tiket Candi Ratu Boko akan berakhir dalam 1 jam',
+          type: 'Expiry',
+          scheduledTime: DateTime.now().subtract(const Duration(days: 2)),
+          sentTime: DateTime.now().subtract(const Duration(days: 2)),
+          ticketTitle: 'Tiket Wisata Candi Ratu Boko',
+          templeTitle: 'Candi Ratu Boko',
+          isRead: true,
+        ),
+      ];
+
+      for (var notification in testNotifications) {
+        await NotificationHistoryService.saveNotification(notification);
+      }
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+              'Berhasil menambahkan ${testNotifications.length} test notification history!',
+              style: GoogleFonts.poppins(fontSize: 14)),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal menambahkan test history: $e',
+              style: GoogleFonts.poppins(fontSize: 14)),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 
   Future<void> _navigateToEditProfile() async {

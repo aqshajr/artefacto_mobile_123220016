@@ -3,13 +3,14 @@ import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:artefacto/pages/menu/profile.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../notif_page.dart';
+import '../notification_history_page.dart';
 import 'camera.dart';
 import 'eksplorasi.dart';
 import 'visit_notes.dart';
 import '../tiket/my_tickets_page.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/service/api_service.dart';
+import 'package:artefacto/service/notification_service.dart';
 import 'dart:async';
 
 class HomePage extends StatefulWidget {
@@ -53,6 +54,13 @@ class _HomePageState extends State<HomePage> {
     Future.delayed(const Duration(seconds: 1), () {
       if (mounted) {
         _loadData();
+      }
+    });
+
+    // AUTO SCHEDULE NOTIFICATIONS when app starts (for any new tickets)
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) {
+        _autoScheduleNotifications();
       }
     });
 
@@ -234,6 +242,20 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // AUTO SCHEDULE NOTIFICATIONS FOR USER'S TICKETS
+  Future<void> _autoScheduleNotifications() async {
+    try {
+      print('[HomePage] 🎫 Auto scheduling notifications for user tickets...');
+
+      // Schedule notifications for all user tickets (background scheduling)
+      await NotificationService.autoScheduleWhenTicketPurchased();
+
+      print('[HomePage] ✅ Auto notification scheduling completed');
+    } catch (e) {
+      print('[HomePage] ❌ Error auto scheduling notifications: $e');
+    }
+  }
+
   // Method to refresh user data - called from ProfilePage
   Future<void> refreshUserData() async {
     print('[HomePage] refreshUserData called from ProfilePage');
@@ -351,7 +373,8 @@ class _HomePageState extends State<HomePage> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (context) => const NotificationPage()),
+                          builder: (context) =>
+                              const NotificationHistoryPage()),
                     );
                   },
                 ),

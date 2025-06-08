@@ -150,7 +150,8 @@ class _LearningPageState extends State<LearningPage> {
               SizedBox(height: 12),
               Row(
                 children: [
-                  Icon(Icons.phone_android, color: Colors.blue, size: 24),
+                  Icon(Icons.phone_android,
+                      color: const Color(0xff233743), size: 24),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -163,7 +164,8 @@ class _LearningPageState extends State<LearningPage> {
               SizedBox(height: 8),
               Row(
                 children: [
-                  Icon(Icons.auto_awesome, color: Colors.purple, size: 24),
+                  Icon(Icons.auto_awesome,
+                      color: const Color(0xff233743), size: 24),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
