@@ -2,12 +2,9 @@ import 'package:artefacto/pages/tiket/ticket_selected_page.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:artefacto/service/api_service.dart';
-import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'detail_artifact.dart';
-import 'detail_temples.dart';
 import 'package:artefacto/pages/learning/learning_page.dart';
 
 class EksplorasiPage extends StatefulWidget {
@@ -26,7 +23,6 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
   int totalArtifacts = 0;
   String? _username;
   final ApiService _apiService = ApiService();
-  final AuthService _authService = AuthService();
 
   // Ganti dengan path yang benar jika Anda punya aset logo, atau set null jika tidak ada.
   final String? logoAssetPath = null; // 'assets/images/logo_artefacto.png';
@@ -417,43 +413,6 @@ class _EksplorasiPageState extends State<EksplorasiPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildErrorWidget() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.error_outline_rounded,
-                size: 60, color: Colors.red.shade400),
-            const SizedBox(height: 20),
-            Text(
-              errorMessage.isNotEmpty
-                  ? errorMessage
-                  : 'Terjadi kesalahan saat memuat data.',
-              style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey[700]),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.refresh_rounded, color: Colors.white),
-              label: Text('Coba Lagi',
-                  style: GoogleFonts.poppins(
-                      color: Colors.white, fontWeight: FontWeight.w500)),
-              style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xffB69574),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8.0))),
-              onPressed: _refreshData,
-            ),
-          ],
-        ),
       ),
     );
   }

@@ -81,10 +81,7 @@ class TempleService {
 
     if (imageFile != null) {
       final mimeType = lookupMimeType(imageFile.path) ?? 'image/jpeg';
-      final fileExt = imageFile.path.split('.').last.toLowerCase();
-      final mediaType = fileExt == 'png'
-          ? MediaType('image', 'png')
-          : MediaType('image', 'jpeg');
+      imageFile.path.split('.').last.toLowerCase();
       request.files.add(
         await http.MultipartFile.fromPath(
           'image',
@@ -170,10 +167,7 @@ class TempleService {
 
     if (imageFile != null) {
       final mimeType = lookupMimeType(imageFile.path) ?? 'image/jpeg';
-      final fileExt = imageFile.path.split('.').last.toLowerCase();
-      final mediaType = fileExt == 'png'
-          ? MediaType('image', 'png')
-          : MediaType('image', 'jpeg');
+      imageFile.path.split('.').last.toLowerCase();
       request.files.add(
         await http.MultipartFile.fromPath(
           'image',
@@ -249,8 +243,8 @@ class TempleService {
         final double distanceInMeters = Geolocator.distanceBetween(
           latitude,
           longitude,
-          lat!,
-          lng!,
+          lat,
+          lng,
         );
 
         final double distanceInKm = distanceInMeters / 1000;

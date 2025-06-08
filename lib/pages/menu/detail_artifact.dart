@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../model/artifact_model.dart';
-import '../../model/temple_model.dart';
 import '../../service/artifact_service.dart';
-import 'lbs_map_page.dart';
 
 class ArtifactDetailPage extends StatefulWidget {
   final Artifact artifact;

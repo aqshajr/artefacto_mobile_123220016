@@ -45,7 +45,6 @@ class _TempleListScreenState extends State<TempleListScreen> {
     }
   }
 
-
   Future<void> _handleEditTemple(Map<String, dynamic>? result) async {
     if (result == null) return;
     final Temple? updatedTemple = result['temple'] as Temple?;
@@ -107,14 +106,7 @@ class _TempleListScreenState extends State<TempleListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () async {
-              final result = await Navigator.push<Map<String, dynamic>?>(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const TempleFormScreen(),
-                ),
-              );
-            },
+            onPressed: () async {},
           ),
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadTemples),
         ],
@@ -168,17 +160,16 @@ class _TempleListScreenState extends State<TempleListScreen> {
     return Card(
       margin: const EdgeInsets.all(8.0),
       child: ListTile(
-        leading:
-            temple.imageUrl != null
-                ? Image.network(
-                  temple.imageUrl! +
-                      '?v=${DateTime.now().millisecondsSinceEpoch}',
-                  width: 60,
-                  height: 60,
-                  fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
-                )
-                : const Icon(Icons.temple_buddhist, size: 60),
+        leading: temple.imageUrl != null
+            ? Image.network(
+                temple.imageUrl! +
+                    '?v=${DateTime.now().millisecondsSinceEpoch}',
+                width: 60,
+                height: 60,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Icon(Icons.broken_image),
+              )
+            : const Icon(Icons.temple_buddhist, size: 60),
         title: Text(
           temple.title ?? 'Tanpa Judul',
           style: GoogleFonts.merriweather(fontWeight: FontWeight.bold),
@@ -232,24 +223,23 @@ class _TempleListScreenState extends State<TempleListScreen> {
   void _showDeleteDialog(Temple temple) {
     showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: Text('Hapus Candi?'),
-            content: Text('Yakin ingin menghapus ${temple.title}?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Batal'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _handleDeleteTemple(temple.templeID!);
-                },
-                child: const Text('Hapus', style: TextStyle(color: Colors.red)),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text('Hapus Candi?'),
+        content: Text('Yakin ingin menghapus ${temple.title}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _handleDeleteTemple(temple.templeID!);
+            },
+            child: const Text('Hapus', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
     );
   }
 }

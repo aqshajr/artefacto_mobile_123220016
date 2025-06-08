@@ -26,8 +26,7 @@ class KritikContent extends StatelessWidget {
   const KritikContent({super.key});
 
   static const List<String> textList = [
-    "Saya kira karena tgl recreat akan mudah",
-    "ternyata mudah-mudah masih sehat dan berakal."
+    "Saya kira akan mudah. Ternyata mudah-mudahan masih sehat dan berakal :)"
   ];
 
   @override
@@ -38,9 +37,7 @@ class SaranContent extends StatelessWidget {
   const SaranContent({super.key});
 
   static const List<String> textList = [
-    "untuk diri kami satu sama lain aja jangan ngide' lg kalo projek banyak.",
-    "Semoga kami dapat nilai baik dan menjadi modal kami untuk masa depan .",
-    "dan semoga kami lancar dan bahagia hidupnya"
+    "Terima kasih dan semangat. Semoga semester depan semakin menantang :)"
   ];
 
   @override
@@ -83,7 +80,7 @@ class HelpPage extends StatelessWidget {
           children: [
             AccordionSection(
               leftIcon: const Icon(Icons.favorite, color: Colors.white),
-              header: const Text('Ungkapan', style: headerStyle),
+              header: const Text('Kesan', style: headerStyle),
               content: const Column(children: [KritikContent()]),
             ),
             AccordionSection(

@@ -1,4 +1,3 @@
-import 'package:artefacto/model/user_model.dart';
 import 'package:artefacto/pages/auth/login_pages.dart';
 import 'package:artefacto/pages/menu/profile.dart';
 import 'package:flutter/material.dart';
@@ -26,10 +25,6 @@ class _HomePageState extends State<HomePage> {
   final AuthService _authService = AuthService();
   Timer? _sessionCheckTimer;
   final ApiService _apiService = ApiService();
-  Map<String, dynamic> _statistics = {};
-  List<dynamic> _temples = [];
-  bool _isLoading = true;
-  String _error = '';
 
   @override
   void initState() {
@@ -73,43 +68,6 @@ class _HomePageState extends State<HomePage> {
     super.dispose();
   }
 
-  Future<bool> _checkAndRefreshSession() async {
-    try {
-      final isValid = await _authService.checkSession();
-      if (!isValid) {
-        // Try to refresh the session
-        return await _authService.refreshSession();
-      }
-      return true;
-    } catch (e) {
-      print('Error checking session: $e');
-      return false;
-    }
-  }
-
-  void _showSessionExpiredDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: const Text('Sesi Berakhir'),
-        content: const Text('Sesi Anda telah berakhir. Silakan login kembali.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context); // Close dialog
-              Navigator.pushReplacement(
-                context,
-                MaterialPageRoute(builder: (context) => const LoginPage()),
-              );
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<Map<String, dynamic>> _loadUserData() async {
     print('[HomePage] _loadUserData called');
     try {
@@ -142,15 +100,8 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  Widget _buildProfilePage(Map<String, dynamic> userData) {
-    return ProfilePage(userData: userData);
-  }
-
   Future<void> _loadData() async {
-    setState(() {
-      _isLoading = true;
-      _error = '';
-    });
+    setState(() {});
 
     try {
       print('[HomePage] Loading temples and artifacts...');
@@ -164,7 +115,6 @@ class _HomePageState extends State<HomePage> {
 
       int templesCount = 0;
       int artifactsCount = 0;
-      List<dynamic> templesList = [];
 
       // Parse temples response
       if (templesResult['success']) {
@@ -172,20 +122,16 @@ class _HomePageState extends State<HomePage> {
         print('[HomePage] Temples data structure: $templesData');
 
         if (templesData is List) {
-          templesList = templesData;
           templesCount = templesData.length;
         } else if (templesData is Map) {
           if (templesData['data'] is List) {
-            templesList = templesData['data'];
             templesCount = (templesData['data'] as List).length;
           } else if (templesData['status'] == 'sukses' &&
               templesData['data'] is List) {
-            templesList = templesData['data'];
             templesCount = (templesData['data'] as List).length;
           } else if (templesData['status'] == 'sukses' &&
               templesData['data'] is Map &&
               templesData['data']['temples'] is List) {
-            templesList = templesData['data']['temples'];
             templesCount = (templesData['data']['temples'] as List).length;
           }
         }
@@ -220,25 +166,15 @@ class _HomePageState extends State<HomePage> {
       }
 
       // Update state with parsed data
-      setState(() {
-        _temples = templesList;
-        _statistics = {
-          'totalTemples': templesCount,
-          'totalArtifacts': artifactsCount,
-        };
-      });
+      setState(() {});
 
       print(
           '[HomePage] Final counts - Temples: $templesCount, Artifacts: $artifactsCount');
     } catch (e) {
       print('[HomePage] Error loading data: $e');
-      setState(() {
-        _error = 'Error: ${e.toString()}';
-      });
+      setState(() {});
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() {});
     }
   }
 
@@ -418,112 +354,6 @@ class _HomePageState extends State<HomePage> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildStatisticsCard() {
-    return Card(
-      elevation: 4,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Statistics',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildStatItem(
-                  'Total Temples',
-                  _statistics['totalTemples']?.toString() ?? '0',
-                  Icons.temple_buddhist,
-                ),
-                _buildStatItem(
-                  'Total Users',
-                  _statistics['totalUsers']?.toString() ?? '0',
-                  Icons.people,
-                ),
-                _buildStatItem(
-                  'Total Tickets',
-                  _statistics['totalTickets']?.toString() ?? '0',
-                  Icons.confirmation_number,
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(String label, String value, IconData icon) {
-    return Column(
-      children: [
-        Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: const TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            color: Colors.grey[600],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTemplesList() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Popular Temples',
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: _temples.length,
-          itemBuilder: (context, index) {
-            final temple = _temples[index];
-            return Card(
-              margin: const EdgeInsets.only(bottom: 16),
-              child: ListTile(
-                leading: CircleAvatar(
-                  backgroundImage: NetworkImage(temple['image'] ?? ''),
-                  onBackgroundImageError: (e, s) => {},
-                  child: temple['image'] == null
-                      ? const Icon(Icons.temple_buddhist)
-                      : null,
-                ),
-                title: Text(temple['name'] ?? 'Unknown Temple'),
-                subtitle: Text(temple['location'] ?? 'Unknown Location'),
-                trailing: const Icon(Icons.arrow_forward_ios),
-                onTap: () {
-                  // Navigate to temple details
-                },
-              ),
-            );
-          },
-        ),
-      ],
     );
   }
 }

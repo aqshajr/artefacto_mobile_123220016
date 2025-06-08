@@ -2,7 +2,6 @@ import 'package:artefacto/model/artifact_model.dart';
 import 'package:artefacto/pages/menu/detail_artifact.dart';
 import 'package:artefacto/service/artifact_service.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../model/temple_model.dart';
 import 'lbs_map_page.dart';
@@ -43,17 +42,6 @@ class _TempleDetailPageState extends State<TempleDetailPage> {
           'Error fetching artifacts for temple ${widget.temple.templeID}: $e');
       // Mengembalikan list kosong atau throw error lagi agar FutureBuilder bisa handle
       return []; // Atau throw e;
-    }
-  }
-
-  Future<void> _launchURL(String urlString) async {
-    final Uri url = Uri.parse(urlString);
-    if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Tidak dapat membuka link: $urlString')),
-        );
-      }
     }
   }
 

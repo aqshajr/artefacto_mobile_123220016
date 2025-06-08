@@ -321,10 +321,6 @@ class _LBSMapPageState extends State<LBSMapPage> {
 
   @override
   Widget build(BuildContext context) {
-    String title = widget.mode == LbsMode.temples
-        ? 'Lokasi & Candi Terdekat'
-        : 'Lokasi & Artefak Terdekat';
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Lokasi Candi',

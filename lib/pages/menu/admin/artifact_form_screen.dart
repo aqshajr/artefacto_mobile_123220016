@@ -46,7 +46,7 @@ class _ArtifactFormScreenState extends State<ArtifactFormScreen> {
     super.initState();
     // Inisialisasi controller dengan nilai dari widget.artifact jika ada
     _templeIdController = TextEditingController(
-      text: widget.artifact?.templeID?.toString() ?? '',
+      text: widget.artifact?.templeID.toString() ?? '',
     );
     _titleController = TextEditingController(
       text: widget.artifact?.title ?? '',
@@ -238,11 +238,9 @@ class _ArtifactFormScreenState extends State<ArtifactFormScreen> {
         // Show success message
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-                widget.artifact == null
-                    ? 'Artefak berhasil ditambahkan!'
-                    : 'Artefak berhasil diperbarui!'
-            ),
+            content: Text(widget.artifact == null
+                ? 'Artefak berhasil ditambahkan!'
+                : 'Artefak berhasil diperbarui!'),
             backgroundColor: Colors.green,
           ),
         );
@@ -253,7 +251,6 @@ class _ArtifactFormScreenState extends State<ArtifactFormScreen> {
           'image': _selectedImageFile,
           'action': widget.artifact == null ? 'create' : 'update',
         });
-
       } catch (e) {
         if (!mounted) return;
 
@@ -295,234 +292,237 @@ class _ArtifactFormScreenState extends State<ArtifactFormScreen> {
           ),
         ),
         child: Stack(
-            children: [
-        Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              // ... (all form fields remain the same)
-              _isTempleLoading
-                  ? const Center(child: CircularProgressIndicator())
-                  : DropdownButtonFormField<int>(
-                value: _templeIdController.text.isNotEmpty
-                    ? int.tryParse(_templeIdController.text)
-                    : null,
-                items: _templeList
-                    .map(
-                      (temple) => DropdownMenuItem<int>(
-                    value: temple.templeID,
-                    child: Text(
-                      temple.title ?? 'Candi ${temple.templeID}',
-                    ),
-                  ),
-                )
-                    .toList(),
-                onChanged: _isLoading ? null : (value) {
-                  setState(() {
-                    _templeIdController.text = value?.toString() ?? '';
-                  });
-                },
-                decoration: InputDecoration(
-                  labelText: 'Pilih Candi',
-                  labelStyle: GoogleFonts.openSans(),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white70,
-                ),
-                validator: (value) {
-                  if (value == null) {
-                    return 'Pilih candi terlebih dahulu';
-                  }
-                  return null;
-                },
-              ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _titleController,
-                  labelText: "Judul Artefak",
-                  validator:
-                      (v) => _validateRequired(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  children: [
+                    // ... (all form fields remain the same)
+                    _isTempleLoading
+                        ? const Center(child: CircularProgressIndicator())
+                        : DropdownButtonFormField<int>(
+                            value: _templeIdController.text.isNotEmpty
+                                ? int.tryParse(_templeIdController.text)
+                                : null,
+                            items: _templeList
+                                .map(
+                                  (temple) => DropdownMenuItem<int>(
+                                    value: temple.templeID,
+                                    child: Text(
+                                      temple.title ??
+                                          'Candi ${temple.templeID}',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: _isLoading
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      _templeIdController.text =
+                                          value?.toString() ?? '';
+                                    });
+                                  },
+                            decoration: InputDecoration(
+                              labelText: 'Pilih Candi',
+                              labelStyle: GoogleFonts.openSans(),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              filled: true,
+                              fillColor: Colors.white70,
+                            ),
+                            validator: (value) {
+                              if (value == null) {
+                                return 'Pilih candi terlebih dahulu';
+                              }
+                              return null;
+                            },
+                          ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _titleController,
+                      labelText: "Judul Artefak",
+                      validator: (v) => _validateRequired(
                         v,
                         minLength: 3,
                         fieldName: 'Judul artefak',
                       ),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _descriptionController,
-                  labelText: "Deskripsi",
-                  maxLines: 3,
-                  validator:
-                      (v) => _validateRequired(
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _descriptionController,
+                      labelText: "Deskripsi",
+                      maxLines: 3,
+                      validator: (v) => _validateRequired(
                         v,
                         minLength: 10,
                         fieldName: 'Deskripsi artefak',
                       ),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _detailPeriodController,
-                  labelText: "Detail Periode",
-                  validator:
-                      (v) => _validateRequired(v, fieldName: 'Detail periode'),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _detailMaterialController,
-                  labelText: "Detail Material",
-                  validator:
-                      (v) => _validateRequired(v, fieldName: 'Detail material'),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _detailSizeController,
-                  labelText: "Detail Ukuran",
-                  validator:
-                      (v) => _validateRequired(v, fieldName: 'Detail ukuran'),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _detailStyleController,
-                  labelText: "Detail Gaya",
-                  validator:
-                      (v) => _validateRequired(v, fieldName: 'Detail gaya'),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _funfactTitleController,
-                  labelText: "Judul Funfact",
-                  validator:
-                      (v) => _validateRequired(
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _detailPeriodController,
+                      labelText: "Detail Periode",
+                      validator: (v) =>
+                          _validateRequired(v, fieldName: 'Detail periode'),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _detailMaterialController,
+                      labelText: "Detail Material",
+                      validator: (v) =>
+                          _validateRequired(v, fieldName: 'Detail material'),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _detailSizeController,
+                      labelText: "Detail Ukuran",
+                      validator: (v) =>
+                          _validateRequired(v, fieldName: 'Detail ukuran'),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _detailStyleController,
+                      labelText: "Detail Gaya",
+                      validator: (v) =>
+                          _validateRequired(v, fieldName: 'Detail gaya'),
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _funfactTitleController,
+                      labelText: "Judul Funfact",
+                      validator: (v) => _validateRequired(
                         v,
                         minLength: 3,
                         fieldName: 'Judul funfact',
                       ),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _funfactDescriptionController,
-                  labelText: "Deskripsi Funfact",
-                  maxLines: 3,
-                  validator:
-                      (v) => _validateRequired(
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _funfactDescriptionController,
+                      labelText: "Deskripsi Funfact",
+                      maxLines: 3,
+                      validator: (v) => _validateRequired(
                         v,
                         minLength: 10,
                         fieldName: 'Deskripsi funfact',
                       ),
-                ),
-                const SizedBox(height: 20),
-                _buildTextFormField(
-                  controller: _locationUrlController,
-                  labelText: "URL Lokasi",
-                  validator: _validateUrl,
-                ),
-                const SizedBox(height: 20),
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.image),
-                  label: const Text("Pilih Gambar dari Galeri"),
-                  onPressed: _pickImage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xff233743),
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                if (_imageError != null)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      _imageError!,
-                      style: const TextStyle(color: Colors.red),
                     ),
-                  ),
-                const SizedBox(height: 30),
-                // Preview gambar lama (jika ada) dan gambar baru (jika dipilih)
-                if (_selectedImageFile != null) ...[
-                  Text(
-                    "Gambar yang dipilih:",
-                    style: GoogleFonts.openSans(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Image.file(
-                    _selectedImageFile!,
-                    height: 150,
-                    fit: BoxFit.cover,
-                  ),
-                ] else if (widget.artifact?.imageUrl != null &&
-                    widget.artifact!.imageUrl!.isNotEmpty) ...[
-                  Text(
-                    "Gambar saat ini:",
-                    style: GoogleFonts.openSans(fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 5),
-                  Image.network(
-                    widget.artifact!.imageUrl! +
-                        '?v=${DateTime.now().millisecondsSinceEpoch}',
-                    height: 150,
-                    fit: BoxFit.cover,
-                    errorBuilder:
-                        (_, __, ___) =>
+                    const SizedBox(height: 20),
+                    _buildTextFormField(
+                      controller: _locationUrlController,
+                      labelText: "URL Lokasi",
+                      validator: _validateUrl,
+                    ),
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.image),
+                      label: const Text("Pilih Gambar dari Galeri"),
+                      onPressed: _pickImage,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff233743),
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    if (_imageError != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: Text(
+                          _imageError!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    const SizedBox(height: 30),
+                    // Preview gambar lama (jika ada) dan gambar baru (jika dipilih)
+                    if (_selectedImageFile != null) ...[
+                      Text(
+                        "Gambar yang dipilih:",
+                        style:
+                            GoogleFonts.openSans(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 5),
+                      Image.file(
+                        _selectedImageFile!,
+                        height: 150,
+                        fit: BoxFit.cover,
+                      ),
+                    ] else if (widget.artifact?.imageUrl != null &&
+                        widget.artifact!.imageUrl!.isNotEmpty) ...[
+                      Text(
+                        "Gambar saat ini:",
+                        style:
+                            GoogleFonts.openSans(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 5),
+                      Image.network(
+                        widget.artifact!.imageUrl! +
+                            '?v=${DateTime.now().millisecondsSinceEpoch}',
+                        height: 150,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
                             const Icon(Icons.broken_image, size: 150),
-                  ),
-                  Text(
-                    "Pilih gambar baru untuk mengubah",
-                    style: GoogleFonts.openSans(fontSize: 12),
-                  ),
-                ],
-              const SizedBox(height: 30),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _saveArtifact,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xff233743),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 30,
-                    vertical: 15,
-                  ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  textStyle: GoogleFonts.merriweather(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                child: _isLoading
-                    ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                  ),
-                )
-                    : Text(
-                  widget.artifact == null
-                      ? "Tambah Artefak"
-                      : "Simpan Perubahan",
+                      ),
+                      Text(
+                        "Pilih gambar baru untuk mengubah",
+                        style: GoogleFonts.openSans(fontSize: 12),
+                      ),
+                    ],
+                    const SizedBox(height: 30),
+                    ElevatedButton(
+                      onPressed: _isLoading ? null : _saveArtifact,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xff233743),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 30,
+                          vertical: 15,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        textStyle: GoogleFonts.merriweather(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      child: _isLoading
+                          ? const SizedBox(
+                              height: 20,
+                              width: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                valueColor:
+                                    AlwaysStoppedAnimation<Color>(Colors.white),
+                              ),
+                            )
+                          : Text(
+                              widget.artifact == null
+                                  ? "Tambah Artefak"
+                                  : "Simpan Perubahan",
+                            ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-        ),
-              // Loading overlay
-              if (_isLoading)
-                Container(
-                  color: Colors.black26,
-                  child: const Center(
-                    child: CircularProgressIndicator(),
-                  ),
+            ),
+            // Loading overlay
+            if (_isLoading)
+              Container(
+                color: Colors.black26,
+                child: const Center(
+                  child: CircularProgressIndicator(),
                 ),
-            ],
+              ),
+          ],
         ),
       ),
     );
   }
+
   // Helper method untuk membuat TextFormField yang konsisten
   TextFormField _buildTextFormField({
     required TextEditingController controller,

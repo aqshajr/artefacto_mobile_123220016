@@ -443,7 +443,7 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                                                       ),
                                                       const SizedBox(height: 8),
                                                       Text(
-                                                        ticket.ticket?.temple
+                                                        ticket.ticket.temple
                                                                 ?.templeName ??
                                                             'Tiket Wisata',
                                                         style: GoogleFonts
@@ -458,7 +458,7 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                                                       const SizedBox(height: 8),
                                                       Text(
                                                         ticket.ticket
-                                                                ?.description ??
+                                                                .description ??
                                                             'Informasi detail tiket akan ditampilkan di halaman selanjutnya.',
                                                         style:
                                                             GoogleFonts.poppins(
@@ -490,7 +490,7 @@ class _MyTicketsPageState extends State<MyTicketsPage> {
                                                         ),
                                                         child: Text(
                                                           _formatPrice(ticket
-                                                              .ticket?.price),
+                                                              .ticket.price),
                                                           style: GoogleFonts
                                                               .poppins(
                                                             fontSize: 16,

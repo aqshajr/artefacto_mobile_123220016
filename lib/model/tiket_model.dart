@@ -1,4 +1,3 @@
-import 'package:artefacto/model/temple_summary.dart';
 import 'temple_model.dart';
 
 class TicketRequest {

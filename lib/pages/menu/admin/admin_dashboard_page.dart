@@ -1,4 +1,3 @@
-import 'package:artefacto/pages/menu/admin/tiket_form_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -33,22 +32,26 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   Future<void> _logout() async {
     // Show confirmation dialog
     bool confirm = await showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text("Konfirmasi Logout", style: GoogleFonts.merriweather()),
-        content: Text("Apakah Anda yakin ingin keluar?", style: GoogleFonts.openSans()),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text("Batal", style: GoogleFonts.openSans(color: Colors.grey)),
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text("Konfirmasi Logout", style: GoogleFonts.merriweather()),
+            content: Text("Apakah Anda yakin ingin keluar?",
+                style: GoogleFonts.openSans()),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text("Batal",
+                    style: GoogleFonts.openSans(color: Colors.grey)),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: Text("Logout",
+                    style: GoogleFonts.openSans(color: Colors.red)),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: Text("Logout", style: GoogleFonts.openSans(color: Colors.red)),
-          ),
-        ],
-      ),
-    ) ?? false;
+        ) ??
+        false;
 
     if (confirm) {
       // Clear shared preferences
@@ -60,7 +63,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (context) => LoginPage()),
-            (Route<dynamic> route) => false,
+        (Route<dynamic> route) => false,
       );
     }
   }
@@ -115,7 +118,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TempleListScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const TempleListScreen()),
                   );
                 },
               ),
@@ -128,7 +132,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const ArtifactListScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const ArtifactListScreen()),
                   );
                 },
               ),
@@ -141,7 +146,8 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                 onTap: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TicketListScreen()),
+                    MaterialPageRoute(
+                        builder: (context) => const TicketListScreen()),
                   );
                 },
               ),
@@ -166,12 +172,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
   }
 
   Widget _buildAdminCard(
-      BuildContext context, {
-        required String title,
-        required String subtitle,
-        required IconData icon,
-        required VoidCallback onTap,
-      }) {
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Card(

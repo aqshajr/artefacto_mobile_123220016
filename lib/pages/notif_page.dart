@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // untuk format tanggal
+// untuk format tanggal
 
 class NotificationPage extends StatefulWidget {
   const NotificationPage({super.key});
@@ -26,7 +26,7 @@ class _NotificationPageState extends State<NotificationPage> {
     // Cek apakah ada tiket untuk hari ini
     DateTime today = DateTime.now();
     hasTicketToday = userTicketsDates.any((date) =>
-    date.year == today.year &&
+        date.year == today.year &&
         date.month == today.month &&
         date.day == today.day);
 

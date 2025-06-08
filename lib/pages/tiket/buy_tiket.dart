@@ -23,26 +23,11 @@ class _TicketPurchasePageState extends State<TicketPurchasePage> {
   final _quantityController = TextEditingController(text: '1');
 
   String _validDate = '';
-  String _message = '';
   bool _isLoading = false;
 
   // State untuk menyimpan hasil konversi terakhir
   double? _lastConvertedAmount;
   String? _lastConvertedCurrencyCode;
-  final Map<String, String> _currencyNames = {
-    // Salin dari CurrencyConverterPage untuk display
-    'USD': 'Dolar Amerika',
-    'EUR': 'Euro',
-    'JPY': 'Yen Jepang',
-    'GBP': 'Pound Sterling',
-    'AUD': 'Dolar Australia',
-    'CAD': 'Dolar Kanada',
-    'CHF': 'Franc Swiss',
-    'CNY': 'Yuan Tiongkok',
-    'IDR': 'Rupiah Indonesia',
-    'SGD': 'Dolar Singapura',
-    'MYR': 'Ringgit Malaysia',
-  };
 
   @override
   void dispose() {
@@ -90,7 +75,6 @@ class _TicketPurchasePageState extends State<TicketPurchasePage> {
 
     setState(() {
       _isLoading = true;
-      _message = '';
     });
 
     try {
@@ -130,14 +114,10 @@ class _TicketPurchasePageState extends State<TicketPurchasePage> {
             MaterialPageRoute(builder: (context) => const HomePage()),
             (route) => false,
           );
-        } else {
-          setState(() => _message = response.message ?? 'Gagal membeli tiket');
-        }
+        } else {}
       }
     } catch (e) {
-      if (mounted) {
-        setState(() => _message = e.toString());
-      }
+      if (mounted) {}
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);

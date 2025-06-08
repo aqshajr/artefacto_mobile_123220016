@@ -1,11 +1,9 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest_all.dart' as tz;
 import '../model/owned_ticket_model.dart';
 import '../model/notification_history.dart';
 import 'notification_history_service.dart';
-import 'package:intl/intl.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'tiket_service.dart';
 
@@ -121,34 +119,8 @@ class NotificationService {
   }
 
   // Handle notification tap
-  static void _onNotificationTapped(NotificationResponse response) {
-    print('[NotificationService] Notification tapped: ${response.payload}');
-
-    // Parse payload to get notification info
-    if (response.payload != null) {
-      try {
-        final parts = response.payload!.split('|');
-        if (parts.length >= 2) {
-          final notificationId = int.parse(parts[0]);
-          final type = parts[1];
-
-          // Mark as read in history
-          NotificationHistoryService.markAsRead(notificationId);
-
-          // Log notification received
-          _logNotificationReceived(notificationId, type);
-        }
-      } catch (e) {
-        print('[NotificationService] Error parsing notification payload: $e');
-      }
-    }
-  }
 
   // Log when notification is actually received/tapped
-  static void _logNotificationReceived(int notificationId, String type) {
-    print(
-        '[NotificationService] Notification received - ID: $notificationId, Type: $type');
-  }
 
   static Future<void> scheduleTicketNotifications(OwnedTicket ticket) async {
     final validDate = tz.TZDateTime.from(ticket.validDate, tz.local);

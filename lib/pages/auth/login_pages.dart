@@ -1,19 +1,10 @@
-import 'dart:convert';
-
 import 'package:artefacto/pages/auth/signup_pages.dart';
 import 'package:flutter/material.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/pages/menu/home.dart';
 import 'package:artefacto/pages/menu/admin/admin_dashboard_page.dart';
-import 'package:artefacto/common/page_header.dart';
-import 'package:artefacto/common/page_heading.dart';
-import 'package:artefacto/common/custom_input_field.dart';
-import 'package:artefacto/common/custom_form_button.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:google_fonts/google_fonts.dart';
-
-import '../../model/user_model.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({Key? key}) : super(key: key);

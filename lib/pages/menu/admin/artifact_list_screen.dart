@@ -44,7 +44,6 @@ class _ArtifactListScreenState extends State<ArtifactListScreen> {
     }
   }
 
-
   Future<void> _editArtifact(Map<String, dynamic>? result) async {
     if (result == null) return;
     final Artifact? updatedArtifact = result['artifact'] as Artifact?;
@@ -102,14 +101,7 @@ class _ArtifactListScreenState extends State<ArtifactListScreen> {
           ),
           IconButton(
             icon: const Icon(Icons.add),
-            onPressed: () async {
-              final result = await Navigator.push<Map<String, dynamic>?>(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ArtifactFormScreen(),
-                ),
-              );
-            },
+            onPressed: () async {},
           ),
         ],
       ),
@@ -187,12 +179,11 @@ class _ArtifactListScreenState extends State<ArtifactListScreen> {
                   height: 150,
                   width: double.infinity,
                   fit: BoxFit.cover,
-                  errorBuilder:
-                      (_, __, ___) => Container(
-                        height: 150,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.broken_image, size: 50),
-                      ),
+                  errorBuilder: (_, __, ___) => Container(
+                    height: 150,
+                    color: Colors.grey[200],
+                    child: const Icon(Icons.broken_image, size: 50),
+                  ),
                 ),
               ),
             const SizedBox(height: 12),
@@ -220,8 +211,8 @@ class _ArtifactListScreenState extends State<ArtifactListScreen> {
                     final result = await Navigator.push<Map<String, dynamic>?>(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (context) => ArtifactFormScreen(artifact: artifact),
+                        builder: (context) =>
+                            ArtifactFormScreen(artifact: artifact),
                       ),
                     );
                     await _editArtifact(result);
@@ -242,29 +233,28 @@ class _ArtifactListScreenState extends State<ArtifactListScreen> {
   Future<void> _showDeleteDialog(Artifact artifact) async {
     return showDialog(
       context: context,
-      builder:
-          (context) => AlertDialog(
-            title: const Text('Confirm Delete'),
-            content: Text(
-              'Are you sure you want to delete "${artifact.title}"?',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _deleteArtifact(artifact.artifactID);
-                },
-                child: const Text(
-                  'Delete',
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: const Text('Confirm Delete'),
+        content: Text(
+          'Are you sure you want to delete "${artifact.title}"?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
           ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteArtifact(artifact.artifactID);
+            },
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

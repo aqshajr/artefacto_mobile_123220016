@@ -1,13 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:email_validator/email_validator.dart';
 import 'package:flutter/services.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:artefacto/common/page_header.dart';
-import 'package:artefacto/common/page_heading.dart';
-import 'package:artefacto/common/custom_input_field.dart';
-import 'package:artefacto/common/custom_form_button.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -21,7 +14,6 @@ class SignupPage extends StatefulWidget {
 }
 
 class _SignupPageState extends State<SignupPage> {
-  File? _profileImage;
   String? _imageError;
   final _signupFormKey = GlobalKey<FormState>();
   final AuthService _authService = AuthService();
@@ -33,37 +25,6 @@ class _SignupPageState extends State<SignupPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _passConfirmController = TextEditingController();
-
-  Future<void> _pickProfileImage() async {
-    try {
-      final image = await ImagePicker().pickImage(source: ImageSource.gallery);
-      if (image == null) return;
-      final file = File(image.path);
-      final fileSize = await file.length();
-      final allowedTypes = ['jpg', 'jpeg', 'png', 'gif'];
-      final ext = image.path.split('.').last.toLowerCase();
-      if (!allowedTypes.contains(ext)) {
-        setState(() {
-          _imageError = 'File harus berupa gambar (JPG, PNG, GIF)';
-          _profileImage = null;
-        });
-        return;
-      }
-      if (fileSize > 5 * 1024 * 1024) {
-        setState(() {
-          _imageError = 'Ukuran file maksimal 5MB';
-          _profileImage = null;
-        });
-        return;
-      }
-      setState(() {
-        _profileImage = file;
-        _imageError = null;
-      });
-    } on PlatformException catch (e) {
-      debugPrint('Failed to pick image: $e');
-    }
-  }
 
   Future<void> _handleSignup() async {
     if (_signupFormKey.currentState!.validate()) {
@@ -331,7 +292,7 @@ class _SignupPageState extends State<SignupPage> {
                                 return 'Konfirmasi password wajib diisi';
                               }
                               if (value != _passwordController.text) {
-                                return 'Konfirmasi password harus sama dengan password';
+                                return 'Konfirmasi password harus sama';
                               }
                               return null;
                             },

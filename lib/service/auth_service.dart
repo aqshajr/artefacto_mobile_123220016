@@ -4,9 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:mime/mime.dart';
-import '../model/user_model.dart';
 import 'package:artefacto/utils/secure_storage.dart';
-import 'package:artefacto/utils/constants.dart';
 
 class AuthService {
   final String baseUrl =

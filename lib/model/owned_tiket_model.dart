@@ -1,5 +1,3 @@
-import 'package:artefacto/model/tiket_model.dart';
-
 class OwnedTicketResponse {
   final String status;
   final String message;
@@ -48,8 +46,8 @@ class OwnedTicketData {
   factory OwnedTicketData.fromJson(Map<String, dynamic> json) {
     return OwnedTicketData(
       ownedTickets: json['ownedTickets'] != null
-          ? List<OwnedTicket>.from(
-          json['ownedTickets'].map((ticket) => OwnedTicket.fromJson(ticket)))
+          ? List<OwnedTicket>.from(json['ownedTickets']
+              .map((ticket) => OwnedTicket.fromJson(ticket)))
           : [],
     );
   }
@@ -99,17 +97,23 @@ class OwnedTicket {
       ticketID: json['ticketID'] ?? 0,
       transactionID: json['transactionID'] ?? 0,
       uniqueCode: json['uniqueCode'] ?? '',
-      validDate: json['validDate'] != null ? DateTime.parse(json['validDate']) : DateTime.now(),
+      validDate: json['validDate'] != null
+          ? DateTime.parse(json['validDate'])
+          : DateTime.now(),
       usageStatus: json['usageStatus'] ?? '',
-      createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : DateTime.now(),
-      updatedAt: json['updated_at'] != null ? DateTime.parse(json['updated_at']) : DateTime.now(),
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'])
+          : DateTime.now(),
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'])
+          : DateTime.now(),
       ticket: json['Ticket'] != null
           ? Ticket.fromJson(json['Ticket'])
           : Ticket(
-        price: 0.0,
-        description: '',
-        temple: Temple(title: '', location: ''),
-      ),
+              price: 0.0,
+              description: '',
+              temple: Temple(title: '', location: ''),
+            ),
     );
   }
 }
@@ -127,7 +131,9 @@ class Ticket {
 
   factory Ticket.fromJson(Map<String, dynamic> json) {
     return Ticket(
-      price: json['price'] != null ? double.tryParse(json['price'].toString()) ?? 0.0 : 0.0,
+      price: json['price'] != null
+          ? double.tryParse(json['price'].toString()) ?? 0.0
+          : 0.0,
       description: json['description'] ?? '',
       temple: json['Temple'] != null
           ? Temple.fromJson(json['Temple'])

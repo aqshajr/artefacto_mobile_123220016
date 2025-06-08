@@ -1,5 +1,4 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:artefacto/utils/constants.dart';
 
 class SecureStorage {
   static const _storage = FlutterSecureStorage();
