@@ -136,7 +136,10 @@ class _ProfilePageState extends State<ProfilePage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Hapus Akun'),
-        content: const Text('Apakah Anda yakin ingin menghapus akun Anda?'),
+        content: const Text(
+          'Apakah Anda yakin ingin menghapus akun Anda?\n\nTindakan ini tidak dapat dibatalkan dan semua data Anda akan dihapus permanen.',
+          style: TextStyle(fontSize: 14),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -152,14 +155,57 @@ class _ProfilePageState extends State<ProfilePage> {
 
     if (confirmed == true) {
       try {
-        // Note: Delete account functionality needs to be implemented in AuthService
-        // For now, just logout
-        await _logout();
+        setState(() {
+          isLoading = true;
+        });
+
+        print('[ProfilePage] Calling delete account API...');
+        final result = await _authService.deleteAccount();
+
+        if (!mounted) return;
+
+        if (result['success']) {
+          // Show success message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Akun berhasil dihapus'),
+              backgroundColor: Colors.green,
+            ),
+          );
+
+          // Navigate to login page after short delay to show the message
+          await Future.delayed(const Duration(seconds: 1));
+
+          if (!mounted) return;
+          Navigator.pushAndRemoveUntil(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginPage()),
+            (route) => false,
+          );
+        } else {
+          // Show error message
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(result['message'] ?? 'Gagal menghapus akun'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } catch (e) {
+        print('[ProfilePage] Delete account error: $e');
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gagal menghapus akun: ${e.toString()}')),
+          SnackBar(
+            content: Text('Terjadi kesalahan: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
         );
+      } finally {
+        if (mounted) {
+          setState(() {
+            isLoading = false;
+          });
+        }
       }
     }
   }

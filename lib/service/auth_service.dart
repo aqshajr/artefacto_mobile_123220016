@@ -557,6 +557,63 @@ class AuthService {
     print('=== END DEBUG TOKEN TEST ===');
   }
 
+  Future<Map<String, dynamic>> deleteAccount() async {
+    try {
+      final token = await getToken();
+      if (token == null) {
+        throw Exception('No authentication token');
+      }
+
+      print('[AuthService] Attempting to delete account...');
+
+      final response = await http.delete(
+        Uri.parse('$baseUrl/profile'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      print(
+          '[AuthService] Delete account response status: ${response.statusCode}');
+      print('[AuthService] Delete account response body: ${response.body}');
+
+      final jsonData = jsonDecode(response.body);
+
+      if (response.statusCode == 200 && jsonData['status'] == 'sukses') {
+        // Clear all user data after successful account deletion
+        await _clearUserData();
+
+        return {
+          'success': true,
+          'message': jsonData['message'] ?? 'Akun berhasil dihapus',
+        };
+      }
+
+      // Handle error responses
+      String errorMessage = 'Gagal menghapus akun';
+
+      if (response.statusCode == 401) {
+        errorMessage = 'Sesi telah berakhir, silakan login kembali';
+      } else if (response.statusCode == 404) {
+        errorMessage = 'Akun tidak ditemukan';
+      } else if (jsonData['message'] != null) {
+        errorMessage = jsonData['message'];
+      }
+
+      return {
+        'success': false,
+        'message': errorMessage,
+      };
+    } catch (e) {
+      print('[AuthService] Delete account error: $e');
+      return {
+        'success': false,
+        'message': 'Terjadi kesalahan: ${e.toString()}',
+      };
+    }
+  }
+
   // Alternative token storage using only SharedPreferences
   Future<void> _saveTokenToPrefs(String token) async {
     final prefs = await SharedPreferences.getInstance();
