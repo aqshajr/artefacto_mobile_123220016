@@ -10,6 +10,7 @@ import '../tiket/my_tickets_page.dart';
 import 'package:artefacto/service/auth_service.dart';
 import 'package:artefacto/service/api_service.dart';
 import 'package:artefacto/service/notification_service.dart';
+import '../debug_notification_page.dart';
 import 'dart:async';
 
 class HomePage extends StatefulWidget {
@@ -56,6 +57,13 @@ class _HomePageState extends State<HomePage> {
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted) {
         _autoScheduleNotifications();
+      }
+    });
+
+    // CHECK AND SHOW IMMEDIATE NOTIFICATIONS for unused tickets today
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        _checkAndShowTodayTicketNotifications();
       }
     });
 
@@ -192,6 +200,20 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
+  // CHECK AND SHOW IMMEDIATE NOTIFICATIONS for unused tickets today
+  Future<void> _checkAndShowTodayTicketNotifications() async {
+    try {
+      print('[HomePage] 🎯 Checking for unused tickets today...');
+
+      // Check and show notifications for tickets that should notify today
+      await NotificationService.checkAndShowTodayTicketNotifications();
+
+      print('[HomePage] ✅ Today ticket notifications check completed');
+    } catch (e) {
+      print('[HomePage] ❌ Error checking today ticket notifications: $e');
+    }
+  }
+
   // Method to refresh user data - called from ProfilePage
   Future<void> refreshUserData() async {
     print('[HomePage] refreshUserData called from ProfilePage');
@@ -302,6 +324,19 @@ class _HomePageState extends State<HomePage> {
               surfaceTintColor: Colors.white,
               elevation: 0,
               actions: [
+                // Debug button - commented out for production
+                // IconButton(
+                //   icon: const Icon(Icons.bug_report),
+                //   color: Colors.orange,
+                //   tooltip: 'Debug Notifications',
+                //   onPressed: () {
+                //     Navigator.push(
+                //       context,
+                //       MaterialPageRoute(
+                //           builder: (context) => const DebugNotificationPage()),
+                //     );
+                //   },
+                // ),
                 IconButton(
                   icon: const Icon(Icons.notifications),
                   color: const Color(0xff233743),

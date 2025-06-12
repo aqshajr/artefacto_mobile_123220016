@@ -1,11 +1,13 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
-import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 import '../model/owned_ticket_model.dart';
 import '../model/notification_history.dart';
 import 'notification_history_service.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'tiket_service.dart';
+import 'dart:convert';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class NotificationService {
   static final FlutterLocalNotificationsPlugin _notifications =
@@ -21,10 +23,13 @@ class NotificationService {
       // Initialize time zones
       tz.initializeTimeZones();
 
-      // Use local timezone (simpler approach)
-      tz.setLocalLocation(tz.local);
+      // Set to Jakarta timezone (UTC+7) instead of local/UTC
+      final jakarta = tz.getLocation('Asia/Jakarta');
+      tz.setLocalLocation(jakarta);
 
       print('[NotificationService] Timezone set to: ${tz.local}');
+      print(
+          '[NotificationService] Current time (Jakarta): ${tz.TZDateTime.now(tz.local)}');
 
       // Initialize notifications
       const AndroidInitializationSettings initializationSettingsAndroid =
@@ -203,6 +208,25 @@ class NotificationService {
           ticketTitle: ticket.ticket.description ?? '',
           templeTitle: ticket.ticket.temple?.title ?? '',
         );
+        print('[NotificationService] 🔍 History object created, saving...');
+
+        // TEST: Check if NotificationHistoryService is working
+        print('[NotificationService] 🔍 Testing NotificationHistoryService...');
+        final testHistory = NotificationHistory(
+          notificationId: 99999,
+          ticketId: 0,
+          title: 'Test',
+          body: 'Test notification history save',
+          type: 'Test',
+          scheduledTime: DateTime.now(),
+          sentTime: DateTime.now(),
+          ticketTitle: 'Test',
+          templeTitle: 'Test',
+        );
+        await NotificationHistoryService.saveNotification(testHistory);
+        print(
+            '[NotificationService] ✅ Test save successful, proceeding with real save...');
+
         await NotificationHistoryService.saveNotification(history);
         print(
             '[NotificationService] ✅ Day-H notification scheduled and saved to HIVE');
@@ -286,6 +310,131 @@ class NotificationService {
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
+  }
+
+  // SIMPLER Test scheduled notification using system time
+  static Future<void> showSimpleTestScheduledNotification() async {
+    try {
+      // Cancel any existing test notifications
+      await _notifications.cancel(777777);
+
+      // Use Jakarta timezone consistently
+      final jakarta = tz.getLocation('Asia/Jakarta');
+      final now = tz.TZDateTime.now(jakarta);
+
+      // ADD BUFFER TIME: 10 seconds instead of 5 to avoid race condition
+      final scheduledTime = now.add(const Duration(seconds: 10));
+
+      print('[NotificationService] 🚀 SIMPLE TEST (Fixed TZ + Buffer):');
+      print('[NotificationService] 🚀 Jakarta timezone: ${jakarta.name}');
+      print('[NotificationService] 🚀 Current time (Jakarta): $now');
+      print('[NotificationService] 🚀 Scheduled for (Jakarta): $scheduledTime');
+      print(
+          '[NotificationService] 🚀 Time difference: ${scheduledTime.difference(now).inSeconds} seconds');
+      print('[NotificationService] 🚀 Buffer added to prevent race condition');
+
+      await _notifications.zonedSchedule(
+        777777, // Different ID for simple test
+        '🚀 SIMPLE Test (10s Buffer)',
+        'Fixed timing! Will appear at ${scheduledTime.toString().substring(11, 19)} (in 10 seconds from ${now.toString().substring(11, 19)})',
+        scheduledTime,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'simple_test_fixed',
+            'Simple Test Fixed TZ',
+            channelDescription:
+                'Fixed timezone test for scheduled notifications',
+            importance: Importance.max,
+            priority: Priority.max,
+            enableLights: true,
+            enableVibration: true,
+            playSound: true,
+            ledOnMs: 1000,
+            ledOffMs: 500,
+            showWhen: true,
+            when: null,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+      );
+
+      print(
+          '[NotificationService] ✅ SIMPLE TEST (Fixed TZ + Buffer): Scheduled successfully!');
+
+      // IMMEDIATELY VERIFY the notification was actually scheduled
+      final pendingNotifications =
+          await _notifications.pendingNotificationRequests();
+      final ourNotification =
+          pendingNotifications.where((n) => n.id == 777777).toList();
+
+      print('[NotificationService] 🔍 VERIFICATION AFTER SCHEDULING:');
+      print(
+          '[NotificationService] 🔍 Total pending notifications: ${pendingNotifications.length}');
+      print(
+          '[NotificationService] 🔍 Our notification (777777) found: ${ourNotification.isNotEmpty}');
+
+      if (ourNotification.isNotEmpty) {
+        print(
+            '[NotificationService] ✅ Notification successfully registered in system');
+        print('[NotificationService] ✅ Title: ${ourNotification.first.title}');
+        print('[NotificationService] ✅ Body: ${ourNotification.first.body}');
+      } else {
+        print(
+            '[NotificationService] ❌ CRITICAL: Notification NOT found in pending list!');
+        print(
+            '[NotificationService] ❌ This means the system rejected the scheduling');
+
+        // Check permissions again
+        bool notificationsEnabled = await _areNotificationsEnabled();
+        var notificationStatus = await Permission.notification.status;
+        var alarmStatus = await Permission.scheduleExactAlarm.status;
+
+        print(
+            '[NotificationService] 🔍 Notifications enabled: $notificationsEnabled');
+        print(
+            '[NotificationService] 🔍 Notification permission: $notificationStatus');
+        print('[NotificationService] 🔍 Exact alarm permission: $alarmStatus');
+      }
+
+      // Save to history for tracking
+      final history = NotificationHistory(
+        notificationId: 777777,
+        ticketId: 0,
+        title: '🚀 SIMPLE Test (10s Buffer) - ATTEMPT',
+        body:
+            'Fixed timing! Scheduled for ${scheduledTime.toString().substring(11, 19)} from ${now.toString().substring(11, 19)}',
+        type: 'Simple-Test-Buffer',
+        scheduledTime: scheduledTime.toLocal(),
+        sentTime: now.toLocal(),
+        ticketTitle: 'Test Ticket',
+        templeTitle: 'Test Temple',
+      );
+      await NotificationHistoryService.saveNotification(history);
+    } catch (e) {
+      print(
+          '[NotificationService] ❌ SIMPLE TEST (Fixed TZ + Buffer) ERROR: $e');
+
+      // Save error to history
+      final history = NotificationHistory(
+        notificationId: 777777,
+        ticketId: 0,
+        title: '❌ SIMPLE Test (10s Buffer) - ERROR',
+        body: 'Error with timing fix: $e',
+        type: 'Simple-Test-Buffer-Error',
+        scheduledTime: DateTime.now(),
+        sentTime: DateTime.now(),
+        ticketTitle: 'Test Ticket',
+        templeTitle: 'Test Temple',
+      );
+      await NotificationHistoryService.saveNotification(history);
+    }
   }
 
   // Get scheduled notifications count for debugging
@@ -441,38 +590,76 @@ class NotificationService {
         return;
       }
 
-      // Only show notification if it's past 8 AM and there are tickets for today
-      if (now.hour >= 8) {
+      // Show notification immediately if there are unused tickets for today (remove 8 AM restriction)
+      if (todayTickets.isNotEmpty) {
         print(
-            '[NotificationService] ✅ Time is ${now.hour}:${now.minute} (>=8 AM) and found ${todayTickets.length} tickets for today');
+            '[NotificationService] ✅ Found ${todayTickets.length} unused tickets for today - showing notifications immediately');
 
         for (var ticket in todayTickets) {
           await showRealTicketNotification(ticket);
 
           // Save to history
           try {
+            print(
+                '[NotificationService] 🔍 Preparing to save notification history...');
+            print(
+                '[NotificationService] 🔍 Ticket ID: ${ticket.ownedTicketID}');
+            print(
+                '[NotificationService] 🔍 Temple: ${ticket.ticket.temple?.title}');
+            print(
+                '[NotificationService] 🔍 Description: ${ticket.ticket.description}');
+
+            // Get current user ID for proper filtering
+            final prefs = await SharedPreferences.getInstance();
+            final currentUserId = prefs.getInt('userId') ?? 0;
+            print('[NotificationService] 🔍 Current User ID: $currentUserId');
+
             final history = NotificationHistory(
               notificationId: ticket.ownedTicketID + 10000, // Unique ID
               ticketId: ticket.ownedTicketID,
               title: '🎫 Tiket Siap Digunakan!',
               body:
                   'Tiket ${ticket.ticket.temple?.title ?? 'candi'} aktif hari ini. Selamat berkunjung!',
-              type: 'Day-H-Auto',
+              type: 'Day-H-Immediate',
               scheduledTime: DateTime(today.year, today.month, today.day, 8, 0),
               sentTime: now,
               ticketTitle: ticket.ticket.description ?? 'Tiket Wisata',
               templeTitle: ticket.ticket.temple?.title ?? 'Candi',
+              userId: currentUserId, // Include current user ID
             );
+
+            print('[NotificationService] 🔍 History object created, saving...');
+
+            // TEST: Check if NotificationHistoryService is working
+            print(
+                '[NotificationService] 🔍 Testing NotificationHistoryService...');
+            final testHistory = NotificationHistory(
+              notificationId: 99999,
+              ticketId: 0,
+              title: 'Test',
+              body: 'Test notification history save',
+              type: 'Test',
+              scheduledTime: DateTime.now(),
+              sentTime: DateTime.now(),
+              ticketTitle: 'Test',
+              templeTitle: 'Test',
+              userId: currentUserId, // Include user ID in test too
+            );
+            await NotificationHistoryService.saveNotification(testHistory);
+            print(
+                '[NotificationService] ✅ Test save successful, proceeding with real save...');
+
             await NotificationHistoryService.saveNotification(history);
             print(
-                '[NotificationService] ✅ Real ticket notification saved to history');
+                '[NotificationService] ✅ Real ticket notification saved to history successfully!');
           } catch (e) {
             print('[NotificationService] ❌ Error saving to history: $e');
+            print('[NotificationService] ❌ Error type: ${e.runtimeType}');
+            print('[NotificationService] ❌ Stack trace: ${StackTrace.current}');
           }
         }
       } else {
-        print(
-            '[NotificationService] ⏰ It\'s not 8 AM yet (current: ${now.hour}:${now.minute}) - tickets found but too early');
+        print('[NotificationService] ❌ No unused tickets for today found');
       }
     } catch (e) {
       print('[NotificationService] ❌ Error checking today tickets: $e');
@@ -674,6 +861,135 @@ class NotificationService {
       }
     } catch (e) {
       print('[NotificationService] ❌ DEBUG ERROR: $e');
+    }
+  }
+
+  static Future<void> scheduleNotificationForTicket(
+      OwnedTicket ownedTicket) async {
+    try {
+      // Use Asia/Jakarta timezone consistently
+      final jakarta = tz.getLocation('Asia/Jakarta');
+
+      // Parse the visit date and set time to 8 AM Jakarta time
+      final visitDate = ownedTicket.validDate;
+      final notificationTime = tz.TZDateTime(
+        jakarta,
+        visitDate.year,
+        visitDate.month,
+        visitDate.day,
+        8, // 8 AM
+        0, // 0 minutes
+        0, // 0 seconds
+      );
+
+      final now = tz.TZDateTime.now(jakarta);
+
+      // Add timing buffer for immediate test notifications (if within next hour)
+      tz.TZDateTime actualNotificationTime = notificationTime;
+      if (notificationTime.isBefore(now.add(const Duration(hours: 1)))) {
+        // For near-future notifications, add 15 second buffer
+        actualNotificationTime = now.add(const Duration(seconds: 15));
+        print(
+            '[NotificationService] ⚠️ Near-future notification: Added 15s buffer');
+        print('[NotificationService] ⚠️ Original time: $notificationTime');
+        print(
+            '[NotificationService] ⚠️ Buffered time: $actualNotificationTime');
+      }
+
+      // Check if the notification time has already passed
+      if (actualNotificationTime.isBefore(now)) {
+        print(
+            '[NotificationService] ⏰ Not scheduling ticket ${ownedTicket.ownedTicketID} - time has passed ($actualNotificationTime)');
+        return;
+      }
+
+      // Check if ticket is already used
+      if (ownedTicket.usageStatus == 'Sudah Digunakan') {
+        print(
+            '[NotificationService] ❌ Skipping ticket ${ownedTicket.ownedTicketID} - already ${ownedTicket.usageStatus}');
+        return;
+      }
+
+      print(
+          '[NotificationService] 🚀 Scheduling notification for ticket ${ownedTicket.ownedTicketID} at $actualNotificationTime');
+      print('[NotificationService] 🚀 Current time: $now');
+      print(
+          '[NotificationService] 🚀 Time until notification: ${actualNotificationTime.difference(now).inMinutes} minutes');
+
+      await _notifications.zonedSchedule(
+        ownedTicket.ownedTicketID,
+        '🎫 Reminder Kunjungan Pura',
+        'Jangan lupa kunjungan Anda hari ini ke ${ownedTicket.ticket.temple?.title ?? 'Temple'} - ${ownedTicket.ticket.description ?? 'Ticket'}!',
+        actualNotificationTime,
+        const NotificationDetails(
+          android: AndroidNotificationDetails(
+            'ticket_reminders',
+            'Ticket Reminders',
+            channelDescription:
+                'Notifications to remind users about their temple visits',
+            importance: Importance.high,
+            priority: Priority.high,
+            enableLights: true,
+            enableVibration: true,
+            playSound: true,
+            ledOnMs: 1000,
+            ledOffMs: 500,
+            showWhen: true,
+            when: null,
+          ),
+          iOS: DarwinNotificationDetails(
+            presentAlert: true,
+            presentBadge: true,
+            presentSound: true,
+          ),
+        ),
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+        uiLocalNotificationDateInterpretation:
+            UILocalNotificationDateInterpretation.absoluteTime,
+        payload: jsonEncode({
+          'ownedTicketID': ownedTicket.ownedTicketID,
+          'ticketID': ownedTicket.ticketID,
+          'templeID': ownedTicket.ticket.templeID,
+          'templeName': ownedTicket.ticket.temple?.title,
+          'ticketDescription': ownedTicket.ticket.description,
+          'validDate': ownedTicket.validDate.toIso8601String(),
+        }),
+      );
+
+      print(
+          '[NotificationService] ✅ Successfully scheduled notification for ticket ${ownedTicket.ownedTicketID}');
+
+      // Save to notification history for tracking
+      final history = NotificationHistory(
+        notificationId: ownedTicket.ownedTicketID,
+        ticketId: ownedTicket.ticketID,
+        title: '🎫 Reminder Kunjungan Pura - ATTEMPT',
+        body:
+            'Scheduled for ${ownedTicket.ticket.temple?.title ?? 'Temple'} - ${ownedTicket.ticket.description ?? 'Ticket'}',
+        type: 'Ticket-Reminder',
+        scheduledTime: actualNotificationTime.toLocal(),
+        sentTime: now.toLocal(),
+        ticketTitle: ownedTicket.ticket.description ?? 'Ticket',
+        templeTitle: ownedTicket.ticket.temple?.title ?? 'Temple',
+      );
+      await NotificationHistoryService.saveNotification(history);
+    } catch (e) {
+      print(
+          '[NotificationService] ❌ Error scheduling notification for ticket ${ownedTicket.ownedTicketID}: $e');
+
+      // Save error to history
+      final history = NotificationHistory(
+        notificationId: ownedTicket.ownedTicketID,
+        ticketId: ownedTicket.ticketID,
+        title: '❌ Reminder Kunjungan Pura - ERROR',
+        body: 'Failed to schedule: $e',
+        type: 'Ticket-Reminder-Error',
+        scheduledTime: DateTime.now(),
+        sentTime: DateTime.now(),
+        ticketTitle: ownedTicket.ticket.description ?? 'Ticket',
+        templeTitle: ownedTicket.ticket.temple?.title ?? 'Temple',
+      );
+      await NotificationHistoryService.saveNotification(history);
     }
   }
 }

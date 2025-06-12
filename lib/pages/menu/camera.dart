@@ -29,52 +29,53 @@ class _CameraPageState extends State<CameraPage> {
   Future<bool> _requestGalleryPermission() async {
     try {
       if (Platform.isAndroid) {
-        // Android 13+ (API 33) menggunakan media permissions
-        if (await Permission.mediaLibrary.isRestricted) {
-          return false;
-        }
-
-        final status = await Permission.mediaLibrary.request();
+        // Try photos permission first (for Android 13+)
+        var status = await Permission.photos.request();
         if (status.isGranted) return true;
+
+        // Fallback to storage permission (for older Android)
+        status = await Permission.storage.request();
+        if (status.isGranted) return true;
+
         if (status.isPermanentlyDenied) {
           _showSettingsDialog();
-          return false;
         }
-
-        // Fallback untuk Android <13
-        final storageStatus = await Permission.storage.request();
-        return storageStatus.isGranted;
+        return false;
       } else {
         // iOS
         final status = await Permission.photos.request();
-        if (status.isGranted) return true;
         if (status.isPermanentlyDenied) {
           _showSettingsDialog();
-          return false;
         }
-        return false;
+        return status.isGranted;
       }
-    } on PlatformException catch (e) {
-      debugPrint('Permission error: $e');
+    } catch (e) {
+      debugPrint('Gallery permission error: $e');
       return false;
     }
   }
 
   Future<bool> _requestCameraPermission() async {
     try {
-      if (await Permission.camera.isRestricted) {
+      final status = await Permission.camera.request();
+
+      if (status.isGranted) {
+        return true;
+      } else if (status.isDenied) {
+        _showError('Camera permission is required to take photos');
+        return false;
+      } else if (status.isPermanentlyDenied) {
+        _showSettingsDialog();
+        return false;
+      } else if (status.isRestricted) {
+        _showError('Camera access is restricted on this device');
         return false;
       }
 
-      final status = await Permission.camera.request();
-      if (status.isGranted) return true;
-      if (status.isPermanentlyDenied) {
-        _showSettingsDialog();
-        return false;
-      }
       return false;
-    } on PlatformException catch (e) {
+    } catch (e) {
       debugPrint('Camera permission error: $e');
+      _showError('Failed to request camera permission: $e');
       return false;
     }
   }

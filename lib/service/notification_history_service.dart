@@ -66,6 +66,32 @@ class NotificationHistoryService {
     }
   }
 
+  // DEBUG: Get all notifications without user filtering
+  static Future<List<NotificationHistory>> getAllNotificationsDebug() async {
+    try {
+      final notifications = _getBox.values.toList();
+      notifications.sort((a, b) => b.sentTime.compareTo(a.sentTime));
+
+      // Debug info
+      final currentUserId = await _getCurrentUserId();
+      print('[NotificationHistoryService] DEBUG:');
+      print('  Current User ID: $currentUserId');
+      print('  Total notifications in Hive: ${notifications.length}');
+
+      for (int i = 0; i < notifications.length && i < 3; i++) {
+        final notif = notifications[i];
+        print(
+            '  Notification $i: userId=${notif.userId}, title=${notif.title}');
+      }
+
+      return notifications;
+    } catch (e) {
+      print(
+          '[NotificationHistoryService] Error getting all notifications debug: $e');
+      return [];
+    }
+  }
+
   // Get unread notifications count
   static int getUnreadCount() {
     try {
